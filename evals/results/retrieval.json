@@ -1,0 +1,49 @@
+{
+  "k": 4,
+  "similarity_floor": 0.55,
+  "embedding_model": "BAAI/bge-small-en-v1.5",
+  "hybrid_keyword_weight": 0.5,
+  "default_mode": "vector",
+  "reports": [
+    {
+      "mode": "hybrid",
+      "questions": 48,
+      "recall_at_1": 0.833,
+      "recall_at_k": 1.0,
+      "mrr": 0.899,
+      "gate_accuracy": 0.979,
+      "p50_latency_ms": 6.8,
+      "p95_latency_ms": 23.7,
+      "misses": []
+    },
+    {
+      "mode": "vector",
+      "questions": 48,
+      "recall_at_1": 0.881,
+      "recall_at_k": 1.0,
+      "mrr": 0.927,
+      "gate_accuracy": 0.979,
+      "p50_latency_ms": 6.4,
+      "p95_latency_ms": 19.5,
+      "misses": []
+    },
+    {
+      "mode": "keyword",
+      "questions": 48,
+      "recall_at_1": 0.69,
+      "recall_at_k": 0.857,
+      "mrr": 0.766,
+      "gate_accuracy": 0.938,
+      "p50_latency_ms": 6.9,
+      "p95_latency_ms": 20.6,
+      "misses": [
+        "r15: Do I pay extra for travel to my house? -> ['payments-and-billing', 'refund-policy', 'payments-and-billing']",
+        "r22: Do you work in Denver? -> ['services-and-pricing', 'contact-support', 'payments-and-billing']",
+        "r27: My faucet repair broke after two weeks -> ['services-and-pricing', 'cancellations-and-rescheduling', 'cancellations-and-rescheduling']",
+        "r28: The handyman scratched my floor -> ['services-and-pricing']",
+        "r33: I have a dog, is that a problem? -> ['contact-support', 'satisfaction-guarantee', 'satisfaction-guarantee']",
+        "r40: What are your customer service hours? -> ['services-and-pricing', 'service-areas-and-hours', 'service-areas-and-hours']"
+      ]
+    }
+  ]
+}
