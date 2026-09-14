@@ -1,0 +1,46 @@
+# Local stack: Postgres + pgvector and the API.
+#   docker compose up -d db
+#   docker compose run --rm setup      # migrations, help-center ingest, demo bookings
+#   docker compose up -d api           # http://localhost:8000/docs
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: concierge
+      POSTGRES_PASSWORD: concierge
+      POSTGRES_DB: concierge
+    ports: ["5433:5432"]  # 5433 avoids clashing with a Postgres already running on the host
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U concierge"]
+      interval: 5s
+      retries: 12
+
+  setup:
+    build: .
+    profiles: ["setup"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://concierge:concierge@db:5432/concierge
+    command: ["concierge-ingest", "--seed-demo"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://concierge:concierge@db:5432/concierge
+    ports: ["8000:8000"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata: {}
