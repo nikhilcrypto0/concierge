@@ -1,0 +1,109 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_agent_eval:
+        description: "Run the end-to-end agent eval (calls Claude, costs money)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: lint, types, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check src tests evals
+      - run: uv run mypy src
+      - run: uv run pytest tests/unit -q
+
+  integration:
+    name: integration tests + retrieval eval
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: concierge
+          POSTGRES_PASSWORD: concierge
+          POSTGRES_DB: concierge_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U concierge"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgresql://concierge:concierge@localhost:5432/concierge_test
+      DATABASE_URL: postgresql://concierge:concierge@localhost:5432/concierge_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - uses: actions/cache@v6
+        with:
+          path: .cache/fastembed
+          key: fastembed-${{ hashFiles('src/concierge/config.py') }}
+      - run: uv run pytest tests/integration -q
+      - name: Retrieval eval (free, no LLM calls, fails the build below thresholds)
+        run: |
+          uv run concierge-ingest
+          uv run python evals/run_retrieval_eval.py \
+            --min-recall-at-k 0.95 --min-mrr 0.85 --min-gate-accuracy 0.90
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: retrieval-eval
+          path: evals/results/retrieval.json
+
+  agent-eval:
+    name: end-to-end agent eval (Claude)
+    if: github.event_name == 'workflow_dispatch' && inputs.run_agent_eval
+    needs: integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: concierge
+          POSTGRES_PASSWORD: concierge
+          POSTGRES_DB: concierge_eval
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U concierge"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DATABASE_URL: postgresql://concierge:concierge@localhost:5432/concierge_eval
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - uses: actions/cache@v6
+        with:
+          path: .cache/fastembed
+          key: fastembed-${{ hashFiles('src/concierge/config.py') }}
+      - run: uv run concierge-ingest --seed-demo
+      - run: uv run python evals/run_agent_eval.py --fail-under
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: agent-eval
+          path: evals/results/agent.json

@@ -1,0 +1,48 @@
+{"id": "r01", "question": "If I cancel three days before, do I get all my money back?", "expected_doc": "refund-policy"}
+{"id": "r02", "question": "How long does it take for a refund to show up on my card?", "expected_doc": "refund-policy"}
+{"id": "r03", "question": "Can the chatbot give me a refund by itself?", "expected_doc": "refund-policy"}
+{"id": "r04", "question": "I cancel 30 hours before my appointment, how much is refunded?", "expected_doc": "refund-policy"}
+{"id": "r05", "question": "Can you send my refund to a different card?", "expected_doc": "refund-policy"}
+{"id": "r06", "question": "How do I move my appointment to next week?", "expected_doc": "cancellations-and-rescheduling"}
+{"id": "r07", "question": "Is there a fee to reschedule on the same day?", "expected_doc": "cancellations-and-rescheduling"}
+{"id": "r08", "question": "What happens if I'm not home when the cleaner shows up?", "expected_doc": "cancellations-and-rescheduling"}
+{"id": "r09", "question": "The technician is an hour late, can I cancel?", "expected_doc": "cancellations-and-rescheduling"}
+{"id": "r10", "question": "How many times can I reschedule a booking?", "expected_doc": "cancellations-and-rescheduling"}
+{"id": "r11", "question": "How much is a deep clean for a small apartment?", "expected_doc": "services-and-pricing"}
+{"id": "r12", "question": "Do you fix gas lines?", "expected_doc": "services-and-pricing"}
+{"id": "r13", "question": "What does the electrician charge for a visit?", "expected_doc": "services-and-pricing"}
+{"id": "r14", "question": "Does the AC tune-up include a new filter?", "expected_doc": "services-and-pricing"}
+{"id": "r15", "question": "Do I pay extra for travel to my house?", "expected_doc": "services-and-pricing"}
+{"id": "r16", "question": "Can I pay the cleaner in cash?", "expected_doc": "payments-and-billing"}
+{"id": "r17", "question": "When exactly do you charge my card?", "expected_doc": "payments-and-billing"}
+{"id": "r18", "question": "Where can I download an invoice for my company?", "expected_doc": "payments-and-billing"}
+{"id": "r19", "question": "I forgot to add my promo code, can I add it now?", "expected_doc": "payments-and-billing"}
+{"id": "r20", "question": "Does the tip go to the worker?", "expected_doc": "payments-and-billing"}
+{"id": "r21", "question": "There's a charge from you on my statement I don't recognize", "expected_doc": "payments-and-billing"}
+{"id": "r22", "question": "Do you work in Denver?", "expected_doc": "service-areas-and-hours"}
+{"id": "r23", "question": "Can I book a plumber on a Sunday?", "expected_doc": "service-areas-and-hours"}
+{"id": "r24", "question": "How far in advance can I schedule?", "expected_doc": "service-areas-and-hours"}
+{"id": "r25", "question": "Are you open on Thanksgiving?", "expected_doc": "service-areas-and-hours"}
+{"id": "r26", "question": "The cleaning missed my bathroom, what can I do?", "expected_doc": "satisfaction-guarantee"}
+{"id": "r27", "question": "My faucet repair broke after two weeks", "expected_doc": "satisfaction-guarantee"}
+{"id": "r28", "question": "The handyman scratched my floor", "expected_doc": "satisfaction-guarantee"}
+{"id": "r29", "question": "How long do I have to complain about a bad cleaning?", "expected_doc": "satisfaction-guarantee"}
+{"id": "r30", "question": "Are your workers background checked?", "expected_doc": "professionals-and-safety"}
+{"id": "r31", "question": "Do I have to stay home during the cleaning?", "expected_doc": "professionals-and-safety"}
+{"id": "r32", "question": "The person at my door doesn't look like the profile photo", "expected_doc": "professionals-and-safety"}
+{"id": "r33", "question": "I have a dog, is that a problem?", "expected_doc": "professionals-and-safety"}
+{"id": "r34", "question": "Are your plumbers licensed?", "expected_doc": "professionals-and-safety"}
+{"id": "r35", "question": "How do I change the email on my account?", "expected_doc": "account-and-privacy"}
+{"id": "r36", "question": "Please delete my account and data", "expected_doc": "account-and-privacy"}
+{"id": "r37", "question": "Do you sell my personal information?", "expected_doc": "account-and-privacy"}
+{"id": "r38", "question": "Why can't I remove my credit card from the app?", "expected_doc": "account-and-privacy"}
+{"id": "r39", "question": "I want to talk to a real person", "expected_doc": "contact-support"}
+{"id": "r40", "question": "What are your customer service hours?", "expected_doc": "contact-support"}
+{"id": "r41", "question": "What's your support email address?", "expected_doc": "contact-support"}
+{"id": "r42", "question": "I'm unhappy with how support handled my issue, who do I escalate to?", "expected_doc": "contact-support"}
+{"id": "u01", "question": "What's the weather in Austin tomorrow?", "expected_doc": null}
+{"id": "u02", "question": "Can you recommend a good pizza place?", "expected_doc": null}
+{"id": "u03", "question": "Write me a poem about the ocean", "expected_doc": null}
+{"id": "u04", "question": "What's the capital of France?", "expected_doc": null}
+{"id": "u05", "question": "Help me with my python homework", "expected_doc": null}
+{"id": "u06", "question": "Who won the football game last night?", "expected_doc": null}
