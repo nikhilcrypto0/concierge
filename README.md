@@ -2,18 +2,19 @@
 
 A customer support agent built the way you would run one in production: a **LangGraph** workflow over **Claude**, retrieval on **Postgres + pgvector**, **human approval before any money moves**, and **evals that gate CI**.
 
-The demo company is *Tidewell Home Services*, a fictional home cleaning and repair business with a help center, bookings, and a refund policy.
+The demo company is *Tidewell Home Services*, a fictional home cleaning and repair business with a help center, bookings, and a refund policy. Two screens make the safety model visible: the customer site with the assistant, and the support console where a person approves refunds.
 
-```
-Customer:  Please cancel BK-1042 and refund me
-Concierge: I've sent a refund request of $240.00 for booking BK-1042 to our support team
-           for approval. You'll get a confirmation here once it's reviewed.
+### The customer asks for a refund. The AI does not pay it.
 
-(a support lead approves it in the operator API)
+![Customer chat waiting for a human decision](docs/images/customer-waiting.jpg)
 
-Concierge: Your refund of $240.00 for booking BK-1042 has been approved. It will appear on
-           your original payment method within 5 to 10 business days.
-```
+### A support lead sees why, and decides.
+
+![Support console with a pending refund](docs/images/support-console.jpg)
+
+### The customer's chat updates the moment it is approved.
+
+![Customer chat showing the approved refund](docs/images/customer-approved.jpg)
 
 ## Results at a glance
 
@@ -41,8 +42,9 @@ Measured on 2026-09-13 with Claude Opus 5. Raw output is in [`evals/results/`](e
 
 ```mermaid
 flowchart LR
-    C[Customer app backend] -->|X-API-Key: client| API[FastAPI]
-    O[Support operator] -->|X-API-Key: operator| API
+    V[Visitor] --> WEB[Next.js demo UI<br/>customer site + support console]
+    WEB -->|server-side proxy<br/>holds the API keys| API[FastAPI]
+    O[Support operator] --> WEB
     API --> G[LangGraph workflow]
     G -->|classify, answer| Claude[Claude Opus 5<br/>fallback: Sonnet 5]
     G --> KB[(pgvector<br/>help center)]
@@ -87,6 +89,7 @@ flowchart TD
 | **Per-conversation advisory lock** | A double-submit or a chat racing an approval never runs the graph twice on one thread; works across replicas | The losing request gets a 409 and must retry |
 | **Structured output + citation validation** | Answers are Pydantic objects; an answer citing a document it was not given is rejected as ungrounded | Some correct answers with sloppy citations become "I couldn't find that" |
 | **Search with the customer's words *and* the model's rewrite** | The rewrite resolves follow-ups; the customer's words protect against rewrite drift (see below) | Two searches per question (about 7 ms each) |
+| **The browser never sees an API key or an email** | The UI sends a persona id to its own server routes, which attach the key and map the id to a customer, so a visitor cannot read another customer's data by editing a request | The demo UI needs a server; it cannot be a static page |
 | **Relevance gate before the answer call** | If nothing is similar enough, skip the model entirely | Threshold needs re-tuning if the embedding model changes |
 | **Retrieval mode chosen by measurement** | Hybrid search is the textbook default but scored lower than vector-only here, so vector-only ships | Revisit as the corpus changes |
 | **Local ONNX embeddings (fastembed, bge-small)** | No API key or GPU; identical vectors in dev, CI, and the container | Weaker on some phrasings than larger models (see the one failing case) |
@@ -131,7 +134,7 @@ With equal fusion weights, hybrid dropped to Recall@1 0.786: full-text matches o
 
 ### Review findings, all fixed
 
-A security review and a correctness review found no critical issues. What they did find:
+A security review and a correctness review ran against the agent, and again against the demo UI. Neither found a critical issue. What they did find:
 
 - Request bodies were fully buffered before length validation, so bodies over 64 KB are now rejected before parsing.
 - API docs were public in production; they are now hidden when `ENVIRONMENT=prod`.
@@ -139,37 +142,30 @@ A security review and a correctness review found no critical issues. What they d
 - The injection guard blocked normal corrections like "please ignore my previous message"; the pattern now targets instruction-like phrases only, with regression tests.
 - Concurrent requests on one conversation could run the graph twice on the same thread; a Postgres advisory lock now serializes them.
 - Every handoff looked the same; handoffs now carry a reason, and the eval fails cases that hand off because something broke.
+- In the UI: "New chat" could leave the previous transcript on screen, switching persona mid-request could show one customer's message under the other's account, a demo reset left an open chat tab stuck until a page refresh, and the console could keep offering Approve on a request someone else had already decided. All four are fixed, and the demo-reset recovery was then verified live.
 
 Running the live server also showed the "request sent for approval" message was missing from the saved transcript. It is now its own workflow step, checkpointed before the pause.
 
 ## Run it locally
 
-Requirements: Python 3.12, [uv](https://docs.astral.sh/uv/), and Postgres 16+ with the pgvector extension.
+Requirements: Python 3.12, [uv](https://docs.astral.sh/uv/), Node 22, and Postgres 16+ with the pgvector extension.
 
 ```bash
+# 1. API
 uv sync
-cp .env.example .env            # add ANTHROPIC_API_KEY and generate the two API keys
+cp .env.example .env            # add ANTHROPIC_API_KEY, generate the two API keys, DEMO_MODE=true
 createdb concierge
 uv run concierge-ingest --seed-demo
-uv run uvicorn --factory concierge.api.app:create_app --reload
+uv run uvicorn --factory concierge.api.app:create_app      # http://127.0.0.1:8000
+
+# 2. Demo UI, in a second terminal
+cd web
+npm install
+cp .env.example .env.local      # point it at the API and paste the same two keys
+npm run dev                     # http://localhost:3000
 ```
 
-Open http://localhost:8000/docs for the interactive API. A `docker-compose.yml` is included (`docker compose up -d db`, `docker compose run --rm setup`, `docker compose up -d api`).
-
-### Try the refund flow
-
-```bash
-export CLIENT_KEY=...     # the key after "webapp:" in CLIENT_API_KEYS
-export OPERATOR_KEY=...   # the key after "support-lead:" in OPERATOR_API_KEYS
-
-curl -s localhost:8000/v1/chat -H "X-API-Key: $CLIENT_KEY" -H 'content-type: application/json' \
-  -d '{"customer_email": "maya@example.com", "message": "Please cancel BK-1042 and refund me"}'
-
-curl -s localhost:8000/v1/approvals -H "X-API-Key: $OPERATOR_KEY"
-
-curl -s localhost:8000/v1/approvals/APPROVAL_ID/decision -H "X-API-Key: $OPERATOR_KEY" \
-  -H 'content-type: application/json' -d '{"approve": true, "note": "verified"}'
-```
+Then open **http://localhost:3000**, ask the assistant to cancel BK-1042 and refund you, and approve it at **/console**. The API's own interactive docs stay at http://127.0.0.1:8000/docs.
 
 Demo bookings (times are relative to when you seed):
 
@@ -198,11 +194,12 @@ uv run pytest tests/unit -q                               # workflow, policy, gu
 uv run pytest tests/integration -q                        # real Postgres: API, refunds, retrieval
 uv run python evals/run_retrieval_eval.py                 # free
 uv run python evals/run_agent_eval.py                     # calls Claude, about $0.26 per run
+cd web && npm run lint && npx tsc --noEmit && npm run build
 ```
 
 - **Unit tests** run every workflow path with the model, search index, and database replaced by fakes: approval pause and resume, mismatched approvals, budget breach, invalid model output, ungrounded citations, injection, ownership, rewrite drift, and per-turn state isolation.
-- **Integration tests** use real Postgres: concurrent refund execution, racing approval decisions, rollback on over-refund, the full HTTP refund flow and transcript, conversation hijacking, the conversation lock, rate limiting, body-size limits, and hidden production docs.
-- **CI** (GitHub Actions) runs lint, mypy, unit tests, integration tests against a pgvector service container, and the retrieval eval with thresholds. The agent eval runs on manual dispatch with an API key secret.
+- **Integration tests** use real Postgres: concurrent refund execution, racing approval decisions, rollback on over-refund, the full HTTP refund flow and transcript, conversation hijacking, the conversation lock, rate limiting, body-size limits, hidden production docs, customer-scoped bookings, approval detail, and demo reset.
+- **CI** (GitHub Actions) runs lint, mypy, and unit tests; the web app's lint, types, and production build; integration tests against a pgvector service container; and the retrieval eval with thresholds. The agent eval runs on manual dispatch with an API key secret.
 
 ## Project layout
 
@@ -217,6 +214,11 @@ src/concierge/
   budget.py     token ledger and budgets
   locks.py      per-conversation advisory lock
   mcp_server.py read-only MCP tools
+web/
+  app/          customer site (/), support console (/console), server-side /api proxy routes
+  components/   customer/ and console/ UI
+  hooks/        chat, bookings, approval queue, polling, storage
+  lib/          server-only API client, zod validation, personas, formatting
 migrations/     SQL schema
 data/kb/        help-center articles
 evals/          datasets, runners, committed results
@@ -225,11 +227,13 @@ tests/          unit/ and integration/
 
 ## Known limitations and next steps
 
+- **The support console has no login.** It is demo-only, and the server-side proxy holds the operator key. A public deployment needs operator authentication in front of `/console` and its API routes before anything else.
+- **Security headers are partial.** Frame, sniffing, referrer, and permissions policies ship; a strict script content policy needs per-request nonces, which belongs with the deployment work.
 - **Retrieval**: the one failing eval case points at the embedding model; compare a larger model and hybrid-on-rewrites with the existing evals before changing the default.
 - **Identity**: the client API key represents a trusted backend that asserts the customer's email. A public deployment should pass a signed customer token (JWT) instead.
 - **Rate limiting** is in-process; multiple replicas need Redis or Postgres-backed limits. Chunked uploads without a length header should be capped at the reverse proxy.
 - **Migrations run at startup**, which suits one instance; multi-replica deploys should run them as a release step.
-- **The Docker image has not been built in CI yet**; the Dockerfile and compose file are present but unverified.
-- **No streaming yet**: replies return when the turn completes.
+- **The Docker image has not been built in CI yet**; the Dockerfile and compose file cover the API only, not the web app.
+- **No streaming yet**: replies appear when the turn completes, with a typing indicator meanwhile.
 - **Handoff is a reply, not a ticket**: the next step is creating a ticket in a helpdesk system.
 - **Evals use deterministic checks**: an LLM-as-judge faithfulness score on free-form answers is the next eval to add.

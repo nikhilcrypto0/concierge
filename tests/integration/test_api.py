@@ -218,3 +218,70 @@ def test_a_conversation_already_being_processed_returns_409(
     assert busy.status_code == 409
     released = chat(client, "and the fee?", conversation_id=conversation_id)
     assert released.status_code == 200
+
+
+def test_customers_only_see_their_own_bookings(client: TestClient) -> None:
+    params = {"customer_email": MAYA}
+    references = {b["reference"] for b in
+                  client.get("/v1/bookings", params=params, headers=CLIENT).json()}
+    assert {"BK-1042", "BK-1046"} <= references
+    assert "BK-2001" not in references
+    assert client.get("/v1/bookings", params=params, headers=OPERATOR).status_code == 401
+
+
+def test_approval_detail_shows_customer_booking_and_transcript(client: TestClient) -> None:
+    chat(client, "Please refund BK-1042")
+    pending = client.get("/v1/approvals", headers=OPERATOR).json()
+    assert pending[0]["customer_email"] == MAYA
+    url = f"/v1/approvals/{pending[0]['id']}"
+    assert client.get(url, headers=CLIENT).status_code == 401
+
+    detail = client.get(url, headers=OPERATOR).json()
+    assert (detail["booking"]["reference"], detail["booking"]["amount"]) == ("BK-1042", "$240.00")
+    assert [m["role"] for m in detail["transcript"]] == ["customer", "assistant"]
+    assert "sent a refund request" in detail["transcript"][1]["content"]
+
+
+def test_decision_history_records_who_decided(client: TestClient) -> None:
+    chat(client, "Please refund BK-1042")
+    pending = client.get("/v1/approvals", headers=OPERATOR).json()
+    decision = client.post(f"/v1/approvals/{pending[0]['id']}/decision",
+                           json={"approve": True, "note": "verified"}, headers=OPERATOR).json()
+    assert decision["approval"]["customer_email"] == MAYA
+    history = client.get("/v1/approvals", params={"status": "approved"}, headers=OPERATOR).json()
+    assert [(h["id"], h["reviewer"], h["review_note"]) for h in history] == [
+        (pending[0]["id"], "support-lead", "verified")
+    ]
+
+
+def test_demo_reset_is_disabled_unless_demo_mode(client: TestClient) -> None:
+    assert client.post("/v1/demo/reset", headers=OPERATOR).status_code == 404
+
+
+def test_demo_reset_restores_bookings_and_forgets_conversations(
+    seeded: str, embedder: FastEmbedEmbedder
+) -> None:
+    settings = _settings(seeded).model_copy(update={"demo_mode": True})
+    with TestClient(create_app(settings, llm=KeywordLLM(), embedder=embedder)) as demo:
+        first = chat(demo, "Please refund BK-1042").json()
+        approval = demo.get("/v1/approvals", headers=OPERATOR).json()[0]
+        demo.post(f"/v1/approvals/{approval['id']}/decision", json={"approve": True},
+                  headers=OPERATOR)
+        assert demo.post("/v1/demo/reset", headers=CLIENT).status_code == 401
+        assert demo.post("/v1/demo/reset", headers=OPERATOR).json() == {"status": "reset"}
+
+        bookings = {b["reference"]: b for b in demo.get(
+            "/v1/bookings", params={"customer_email": MAYA}, headers=CLIENT).json()}
+        assert (bookings["BK-1042"]["refunded_cents"], bookings["BK-1042"]["status"]) == (
+            0, "scheduled")
+        assert demo.get("/v1/approvals", params={"status": "approved"},
+                        headers=OPERATOR).json() == []
+        old = demo.get(f"/v1/conversations/{first['conversation_id']}/messages",
+                       params={"customer_email": MAYA}, headers=CLIENT)
+        assert old.status_code == 404
+
+
+def test_root_sends_developers_to_the_docs(client: TestClient) -> None:
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["location"] == "/docs"

@@ -3,6 +3,7 @@
 Run: uv run uvicorn --factory concierge.api.app:create_app
 """
 
+import asyncio
 import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -12,13 +13,17 @@ from uuid import UUID, uuid4
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.graph.state import CompiledStateGraph
 
 from concierge.agent.graph import build_graph, resume_after_decision, run_turn
 from concierge.agent.nodes import AgentDeps, pending_approval_reply
 from concierge.api.schemas import (
+    ApprovalDetail,
     ApprovalOut,
+    BookingOut,
     ChatRequest,
     ChatResponse,
     DecisionRequest,
@@ -41,6 +46,7 @@ from concierge.observability import (
     tracing_callbacks,
 )
 from concierge.retrieval.embeddings import Embedder, FastEmbedEmbedder
+from concierge.retrieval.ingest import DEMO_SEED
 from concierge.retrieval.search import KnowledgeBase
 
 log = structlog.get_logger(__name__)
@@ -49,6 +55,9 @@ _REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 MAX_BODY_BYTES = 64 * 1024
 ClientPrincipal = Annotated[Principal, Depends(require_role("client"))]
 OperatorPrincipal = Annotated[Principal, Depends(require_role("operator"))]
+CustomerEmail = Annotated[str, Query(max_length=254)]
+
+
 class ConversationBusyError(HTTPException):
     """Raised as a class so every request gets a fresh exception object."""
 
@@ -59,8 +68,19 @@ class ConversationBusyError(HTTPException):
 BUSY = ConversationBusyError
 
 
-def _thread(conversation_id: UUID) -> dict[str, Any]:
+def _thread(conversation_id: UUID) -> RunnableConfig:
     return {"configurable": {"thread_id": str(conversation_id)}}
+
+
+async def _transcript(
+    graph: CompiledStateGraph[Any, Any, Any, Any], conversation_id: UUID
+) -> list[TranscriptMessage]:
+    snapshot = await graph.aget_state(_thread(conversation_id))
+    return [
+        TranscriptMessage(role="customer" if m.type == "human" else "assistant",
+                          content=str(m.content))
+        for m in snapshot.values.get("messages", [])
+    ]
 
 
 def create_app(
@@ -111,7 +131,8 @@ def create_app(
             app.state.graph = build_graph(deps, checkpointer)
             app.state.rate_limiter = SlidingWindowRateLimiter(settings.rate_limit_per_minute)
             log.info("app.started", environment=settings.environment,
-                     model=settings.primary_model, tracing=settings.tracing_enabled)
+                     model=settings.primary_model, tracing=settings.tracing_enabled,
+                     demo_mode=settings.demo_mode)
             yield
         finally:
             await pool.close()
@@ -161,6 +182,12 @@ def create_app(
         log.info("request.completed", status=response.status_code,
                  duration_ms=round((time.perf_counter() - started) * 1000, 1))
         return response
+
+    @app.get("/", include_in_schema=False)
+    async def root() -> Response:
+        if public_docs:
+            return RedirectResponse("/docs")
+        return JSONResponse({"service": "concierge"})
 
     @app.get("/healthz", tags=["ops"])
     async def healthz() -> dict[str, str]:
@@ -215,19 +242,22 @@ def create_app(
              response_model=list[TranscriptMessage], tags=["customer"])
     async def transcript(
         conversation_id: UUID,
-        customer_email: Annotated[str, Query(max_length=254)],
+        customer_email: CustomerEmail,
         request: Request,
         _: ClientPrincipal,
     ) -> list[TranscriptMessage]:
         owner = await request.app.state.repository.conversation_owner(conversation_id)
         if owner is None or owner.lower() != customer_email.strip().lower():
             raise HTTPException(status.HTTP_404_NOT_FOUND, "conversation not found")
-        snapshot = await request.app.state.graph.aget_state(_thread(conversation_id))
-        return [
-            TranscriptMessage(role="customer" if m.type == "human" else "assistant",
-                              content=str(m.content))
-            for m in snapshot.values.get("messages", [])
-        ]
+        return await _transcript(request.app.state.graph, conversation_id)
+
+    @app.get("/v1/bookings", response_model=list[BookingOut], tags=["customer"])
+    async def my_bookings(
+        customer_email: CustomerEmail, request: Request, _: ClientPrincipal
+    ) -> list[BookingOut]:
+        repository: SupportRepository = request.app.state.repository
+        bookings = await repository.list_bookings_for_customer(customer_email.strip())
+        return [BookingOut.from_domain(b) for b in bookings]
 
     @app.get("/v1/approvals", response_model=list[ApprovalOut], tags=["operator"])
     async def list_approvals(
@@ -240,6 +270,21 @@ def create_app(
     ) -> list[ApprovalOut]:
         approvals = await request.app.state.repository.list_approvals(status_filter, limit)
         return [ApprovalOut.from_domain(a) for a in approvals]
+
+    @app.get("/v1/approvals/{approval_id}", response_model=ApprovalDetail, tags=["operator"])
+    async def approval_detail(
+        approval_id: UUID, request: Request, _: OperatorPrincipal
+    ) -> ApprovalDetail:
+        repository: SupportRepository = request.app.state.repository
+        approval = await repository.get_approval(approval_id)
+        if approval is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "approval not found")
+        booking = await repository.get_booking(approval.booking_reference)
+        return ApprovalDetail(
+            approval=ApprovalOut.from_domain(approval),
+            booking=BookingOut.from_domain(booking) if booking else None,
+            transcript=await _transcript(request.app.state.graph, approval.conversation_id),
+        )
 
     @app.post("/v1/approvals/{approval_id}/decision", response_model=DecisionResponse,
               tags=["operator"])
@@ -272,11 +317,21 @@ def create_app(
             with trace_session(settings, conversation_id):
                 result = await resume_after_decision(state.graph, conversation_id, decided.id,
                                                      tracing_callbacks(settings))
+        final = await repository.get_approval(decided.id) or decided
         return DecisionResponse(
-            approval=ApprovalOut.from_domain(decided),
+            approval=ApprovalOut.from_domain(final),
             outcome=result.outcome,
             customer_reply=result.reply,
         )
+
+    @app.post("/v1/demo/reset", tags=["operator"])
+    async def reset_demo(request: Request, principal: OperatorPrincipal) -> dict[str, str]:
+        if not settings.demo_mode:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+        seed_sql = await asyncio.to_thread(DEMO_SEED.read_text)
+        await request.app.state.repository.reset_demo_data(seed_sql)
+        log.warning("demo.reset", principal=principal.name)
+        return {"status": "reset"}
 
     return app
 

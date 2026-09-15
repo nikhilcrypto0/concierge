@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from concierge.bookings.models import Booking
 from concierge.bookings.repository import ApprovalRequest
 
 Email = Annotated[
@@ -14,6 +15,10 @@ Email = Annotated[
         strip_whitespace=True, to_lower=True, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
     ),
 ]
+
+
+def _dollars(cents: int) -> str:
+    return f"${cents / 100:.2f}"
 
 
 class ChatRequest(BaseModel):
@@ -50,9 +55,34 @@ class ChatResponse(BaseModel):
     request_id: str
 
 
+class BookingOut(BaseModel):
+    reference: str
+    service: str
+    scheduled_for: datetime
+    status: Literal["scheduled", "completed", "cancelled"]
+    amount_cents: int
+    amount: str
+    refunded_cents: int
+    refunded: str
+
+    @classmethod
+    def from_domain(cls, booking: Booking) -> Self:
+        return cls(
+            reference=booking.reference,
+            service=booking.service,
+            scheduled_for=booking.scheduled_for,
+            status=booking.status,
+            amount_cents=booking.amount_cents,
+            amount=_dollars(booking.amount_cents),
+            refunded_cents=booking.refunded_cents,
+            refunded=_dollars(booking.refunded_cents),
+        )
+
+
 class ApprovalOut(BaseModel):
     id: UUID
     conversation_id: UUID
+    customer_email: str | None = None
     booking_reference: str
     action: str
     amount_cents: int
@@ -66,9 +96,13 @@ class ApprovalOut(BaseModel):
 
     @classmethod
     def from_domain(cls, approval: ApprovalRequest) -> Self:
-        return cls(
-            **approval.__dict__, amount=f"${approval.amount_cents / 100:.2f}"
-        )
+        return cls(**approval.__dict__, amount=_dollars(approval.amount_cents))
+
+
+class ApprovalDetail(BaseModel):
+    approval: ApprovalOut
+    booking: BookingOut | None
+    transcript: list[TranscriptMessage]
 
 
 class DecisionRequest(BaseModel):

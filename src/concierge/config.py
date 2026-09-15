@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     classification_confidence_floor: float = 0.6
 
     rate_limit_per_minute: int = 30
+    # Public demo only: lets operators reset demo bookings from the console. Never on real data.
+    demo_mode: bool = False
     client_api_keys_raw: str = Field(default="", alias="CLIENT_API_KEYS")
     operator_api_keys_raw: str = Field(default="", alias="OPERATOR_API_KEYS")
 
