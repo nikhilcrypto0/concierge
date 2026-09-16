@@ -31,6 +31,8 @@ Rules:
 - The browser sends a persona id, never an email. `web/lib/personas.ts` maps the id to an email on the server, so a visitor cannot ask about someone else's bookings.
 - Route handlers validate every input with zod before forwarding, and upstream errors become friendly messages, never raw detail.
 - `POST /v1/demo/reset` exists only when `DEMO_MODE=true`. It keeps `llm_usage`, so resetting cannot clear the daily token budget.
+- Every figure in the console is derived from approval rows the page already fetched (`web/lib/console-metrics.ts`). No number on screen is invented, and none of them need a stats endpoint. Keep it that way: a dashboard that shows a number nobody can trace is worse than one that shows nothing.
+- Elapsed times come from the `useNow` store, never `Date.now()` during render, which React's purity rule rejects.
 - The console has no login: it is demo-only. A public deployment needs operator auth first.
 
 ## Rules that keep it safe
