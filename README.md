@@ -1,5 +1,11 @@
 # Concierge
 
+[![ci](https://github.com/nikhilcrypto0/concierge/actions/workflows/ci.yml/badge.svg)](https://github.com/nikhilcrypto0/concierge/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
+[![mypy: strict](https://img.shields.io/badge/mypy-strict-blue.svg)](pyproject.toml)
+[![LangGraph 1.2](https://img.shields.io/badge/LangGraph-1.2-orange.svg)](https://github.com/langchain-ai/langgraph)
+
 A customer support agent built the way you would run one in production: a **LangGraph** workflow over **Claude**, retrieval on **Postgres + pgvector**, **human approval before any money moves**, and **evals that gate CI**.
 
 The demo company is *Tidewell Home Services*, a fictional home cleaning and repair business with a help center, bookings, and a refund policy. Two screens make the safety model visible: the customer site with the assistant, and the support console where a person approves refunds.
@@ -50,10 +56,12 @@ flowchart LR
     G --> KB[(pgvector<br/>help center)]
     G --> DB[(Postgres<br/>bookings, approvals,<br/>audit log, token ledger)]
     G --> CP[(Postgres<br/>LangGraph checkpoints)]
-    G -.traces.-> LF[Langfuse]
+    G -.traces, opt-in.-> LF[Langfuse]
     MCP[MCP server<br/>read-only] --> KB
     MCP --> DB
 ```
+
+Langfuse tracing is wired in `observability.py` but **off unless you turn it on**: every tracing call returns early unless `LANGFUSE_SECRET_KEY` is set, and `docker-compose.yml` starts Postgres and the API only. Enabling traces means pointing at your own Langfuse instance. The dotted arrow is drawn that way on purpose, so the diagram does not promise a running service you would not find.
 
 The workflow is an explicit state machine, not a free-form tool-calling loop:
 
