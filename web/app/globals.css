@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+/* Tidewell: warm sand paper, deep sea ink, sea-glass teal. Light by design. */
+:root {
+  color-scheme: light;
+
+  --sand-50: #fcfaf6;
+  --sand-100: #f6f1e8;
+  --sand-200: #ebe2d2;
+  --sand-300: #d9ccb6;
+
+  --ink-950: #0b2124;
+  --ink-900: #102c30;
+  --ink-700: #2e4b4f;
+  --ink-500: #5d7275;
+  --ink-300: #9aabad;
+
+  --tide-50: #eaf5f1;
+  --tide-100: #d3ebe3;
+  --tide-500: #2a8a7b;
+  --tide-600: #1f7a6d;
+  --tide-700: #16635a;
+
+  --clay-100: #f7e3d6;
+  --clay-500: #c2693e;
+  --clay-600: #a7552e;
+
+  --amber-50: #fff6e6;
+  --amber-200: #f4d9a6;
+  --amber-700: #8f5409;
+
+  --rose-50: #fdf0ee;
+  --rose-200: #f1c4bd;
+  --rose-700: #9b3428;
+
+  --moss-50: #edf7ef;
+  --moss-200: #bfe0c8;
+  --moss-700: #22643a;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  --color-sand-50: var(--sand-50);
+  --color-sand-100: var(--sand-100);
+  --color-sand-200: var(--sand-200);
+  --color-sand-300: var(--sand-300);
+  --color-ink-950: var(--ink-950);
+  --color-ink-900: var(--ink-900);
+  --color-ink-700: var(--ink-700);
+  --color-ink-500: var(--ink-500);
+  --color-ink-300: var(--ink-300);
+  --color-tide-50: var(--tide-50);
+  --color-tide-100: var(--tide-100);
+  --color-tide-500: var(--tide-500);
+  --color-tide-600: var(--tide-600);
+  --color-tide-700: var(--tide-700);
+  --color-clay-100: var(--clay-100);
+  --color-clay-500: var(--clay-500);
+  --color-clay-600: var(--clay-600);
+  --color-amber-50: var(--amber-50);
+  --color-amber-200: var(--amber-200);
+  --color-amber-700: var(--amber-700);
+  --color-rose-50: var(--rose-50);
+  --color-rose-200: var(--rose-200);
+  --color-rose-700: var(--rose-700);
+  --color-moss-50: var(--moss-50);
+  --color-moss-200: var(--moss-200);
+  --color-moss-700: var(--moss-700);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
+}
+
+body {
+  background: var(--sand-100);
+  color: var(--ink-900);
+}
+
+::selection {
+  background: var(--tide-100);
+}
+
+:focus-visible {
+  outline: 2px solid var(--tide-600);
+  outline-offset: 2px;
+}
+
+/* Subtle paper grain so large sand areas don't read as flat template fill. */
+.paper {
+  background-color: var(--sand-100);
+  background-image: radial-gradient(rgba(16, 44, 48, 0.035) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typing-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes live-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.animate-rise-in {
+  animation: rise-in 360ms var(--ease-out-expo) both;
+}
+
+.typing-dot {
+  animation: typing-dot 1.1s ease-in-out infinite;
+}
+
+.live-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: live-pulse 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise-in,
+  .typing-dot,
+  .live-pulse::after {
+    animation: none;
+  }
+}

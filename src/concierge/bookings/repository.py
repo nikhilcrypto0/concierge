@@ -28,6 +28,7 @@ class ApprovalRequest:
     review_note: str | None
     created_at: datetime
     decided_at: datetime | None
+    customer_email: str | None = None  # present when the query joins conversations
 
 
 class RefundConflictError(RuntimeError):
@@ -39,7 +40,9 @@ def _booking(row: dict[str, Any]) -> Booking:
 
 
 def _approval(row: dict[str, Any]) -> ApprovalRequest:
-    return ApprovalRequest(**{k: row[k] for k in ApprovalRequest.__dataclass_fields__})
+    return ApprovalRequest(
+        **{k: row[k] for k in ApprovalRequest.__dataclass_fields__ if k in row}
+    )
 
 
 class SupportRepository:
@@ -53,6 +56,22 @@ class SupportRepository:
                 "SELECT * FROM bookings WHERE reference = %s AND lower(customer_email) = lower(%s)",
                 (reference, customer_email),
             )
+            row = await cur.fetchone()
+        return _booking(row) if row else None
+
+    async def list_bookings_for_customer(self, customer_email: str) -> list[Booking]:
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT * FROM bookings WHERE lower(customer_email) = lower(%s)"
+                " ORDER BY scheduled_for DESC",
+                (customer_email,),
+            )
+            return [_booking(row) for row in await cur.fetchall()]
+
+    async def get_booking(self, reference: str) -> Booking | None:
+        """Operator lookup with no ownership filter. Never expose this to the customer role."""
+        async with self._pool.connection() as conn:
+            cur = await conn.execute("SELECT * FROM bookings WHERE reference = %s", (reference,))
             row = await cur.fetchone()
         return _booking(row) if row else None
 
@@ -112,7 +131,12 @@ class SupportRepository:
     async def get_approval(self, approval_id: UUID) -> ApprovalRequest | None:
         async with self._pool.connection() as conn:
             cur = await conn.execute(
-                "SELECT * FROM approval_requests WHERE id = %s", (approval_id,)
+                """
+                SELECT a.*, c.customer_email
+                FROM approval_requests a JOIN conversations c ON c.id = a.conversation_id
+                WHERE a.id = %s
+                """,
+                (approval_id,),
             )
             row = await cur.fetchone()
         return _approval(row) if row else None
@@ -120,10 +144,18 @@ class SupportRepository:
     async def list_approvals(
         self, status: ApprovalStatus, limit: int = 50
     ) -> list[ApprovalRequest]:
+        """Pending: oldest first (a queue). Decided: most recent decision first (a history)."""
         async with self._pool.connection() as conn:
             cur = await conn.execute(
-                "SELECT * FROM approval_requests WHERE status = %s ORDER BY created_at LIMIT %s",
-                (status, limit),
+                """
+                SELECT a.*, c.customer_email
+                FROM approval_requests a JOIN conversations c ON c.id = a.conversation_id
+                WHERE a.status = %(status)s
+                ORDER BY CASE WHEN %(status)s::text = 'pending' THEN a.created_at END ASC,
+                         a.decided_at DESC NULLS LAST
+                LIMIT %(limit)s
+                """,
+                {"status": status, "limit": limit},
             )
             return [_approval(row) for row in await cur.fetchall()]
 
@@ -180,3 +212,15 @@ class SupportRepository:
             if await cur.fetchone() is None:
                 raise RefundConflictError(approval["booking_reference"])
         return True
+
+    async def reset_demo_data(self, seed_sql: str) -> None:
+        """Restore demo bookings and forget every conversation, approval, and checkpoint.
+
+        The token ledger (llm_usage) is deliberately kept: resetting the demo must not reset
+        the daily spending budget.
+        """
+        async with self._pool.connection() as conn, conn.transaction():
+            await conn.execute(seed_sql.encode(), prepare=False)
+            await conn.execute("DELETE FROM checkpoint_writes")
+            await conn.execute("DELETE FROM checkpoint_blobs")
+            await conn.execute("DELETE FROM checkpoints")
