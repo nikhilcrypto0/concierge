@@ -41,14 +41,11 @@ export function DemoBar() {
           })}
         </nav>
 
-        <p className="ml-auto hidden text-xs text-sand-300 md:block">
-          Fictional company, real agent: LangGraph + Claude, refunds need a human
-        </p>
         <a
           href="https://github.com/nikhilcrypto0/concierge"
           target="_blank"
           rel="noreferrer"
-          className="rounded-full px-3 py-1 text-sm text-sand-200 underline-offset-4 hover:text-sand-50 hover:underline"
+          className="ml-auto rounded-full px-3 py-1 text-sm text-sand-200 underline-offset-4 hover:text-sand-50 hover:underline"
         >
           Source
         </a>
