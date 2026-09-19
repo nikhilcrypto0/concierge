@@ -6,7 +6,9 @@
 [![mypy: strict](https://img.shields.io/badge/mypy-strict-blue.svg)](pyproject.toml)
 [![LangGraph 1.2](https://img.shields.io/badge/LangGraph-1.2-orange.svg)](https://github.com/langchain-ai/langgraph)
 
-A customer support agent built the way you would run one in production: a **LangGraph** workflow over **Claude**, retrieval on **Postgres + pgvector**, **human approval before any money moves**, and **evals that gate CI**.
+**A customer support agent that cannot move money on its own.** It answers questions from a help center and handles refund requests, but no refund is paid until a person approves it. The refund amount comes from the written policy in code, never from the model, and every approval is recorded with the reviewer, the time, and the policy reason for the amount.
+
+Under the hood: a **LangGraph** workflow over **Claude**, retrieval on **Postgres + pgvector**, and **evals that gate CI**.
 
 The demo company is *Tidewell Home Services*, a fictional home cleaning and repair business with a help center, bookings, and a refund policy. Two screens make the safety model visible: the customer site with the assistant, and the support console where a person approves refunds.
 
