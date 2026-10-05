@@ -1,12 +1,15 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, forward } from "@/lib/concierge-api";
+import { requireOperator } from "@/lib/operator-session";
 import { decisionBodySchema, readJson, uuidSchema } from "@/lib/validation";
 
 export async function POST(
   request: NextRequest,
   ctx: RouteContext<"/api/approvals/[id]/decision">,
 ): Promise<Response> {
+  const denied = await requireOperator();
+  if (denied) return denied;
   const { id } = await ctx.params;
   const parsed = decisionBodySchema.safeParse(await readJson(request));
   if (!uuidSchema.safeParse(id).success || !parsed.success) {

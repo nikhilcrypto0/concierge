@@ -1,9 +1,12 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, forward } from "@/lib/concierge-api";
+import { requireOperator } from "@/lib/operator-session";
 import { approvalStatusSchema } from "@/lib/validation";
 
 export async function GET(request: NextRequest): Promise<Response> {
+  const denied = await requireOperator();
+  if (denied) return denied;
   const status = approvalStatusSchema.safeParse(
     request.nextUrl.searchParams.get("status") ?? "pending",
   );
