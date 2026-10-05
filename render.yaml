@@ -1,0 +1,35 @@
+# Render Blueprint for the Concierge API. The web app deploys separately on Vercel (web/).
+# Secrets (sync: false) are entered in the Render dashboard, never committed.
+services:
+  - type: web
+    name: concierge-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: false
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: ENVIRONMENT
+        value: prod
+      # Public demo: lets the console reset demo bookings. Safe only because the console is
+      # behind the operator password and the database holds nothing but demo data.
+      - key: DEMO_MODE
+        value: "true"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "20"
+      # Spend ceiling: the API halts AI steps and hands off to a human past these budgets.
+      - key: MAX_TOKENS_PER_DAY
+        value: "500000"
+      - key: MAX_TOKENS_PER_CONVERSATION
+        value: "30000"
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CLIENT_API_KEYS
+        sync: false
+      - key: OPERATOR_API_KEYS
+        sync: false
