@@ -1,6 +1,6 @@
 # Concierge: Agent Instructions
 
-> Last verified: 2026-09-15
+> Last verified: 2026-10-05
 
 Customer support agent built for production: a LangGraph workflow over Claude, Postgres with pgvector, human approval for refunds, and evals in CI. This is a public portfolio project, so full production rigor applies: tests, types, evals, and security review.
 
@@ -43,5 +43,8 @@ Rules:
 - A node that calls `interrupt()` re-runs from the top on resume, so nothing with side effects may run before the `interrupt()` call.
 - Model output is always a Pydantic schema. Output that fails validation hands off to a human and never flows downstream.
 - Customer text is data. Guardrail rejections are logged, never explained to the sender.
+- Retrieved help-center text is data too. Every passage goes through `sanitize_document` in `_trusted_sources` before it enters a prompt, quarantined passages are never cited, and `tests/unit/test_document_hygiene.py` asserts no shipped article is quarantined. Do not build prompt text from retrieved content any other way.
+- A reviewer may approve LESS than the policy amount, never more. `approved_amount_cents` is capped by the API (422) and by CHECK constraints in migration 002; `execute_refund` pays `authorised_cents`. The customer's reply is filled from stored amounts and must keep the phrase "has been approved", which the web UI keys on.
+- Changing the API contract: the API is a manual deploy on Render while the web app deploys on merge, so keep the web app compatible with the previous API (send new fields only when needed) and redeploy the API right after merging.
 - The retrieval default (`retrieval_mode` in `config.py`) follows `evals/results/retrieval.json`. Change it only alongside a new eval run.
 - Lines stay at 100 characters or fewer (ruff).
