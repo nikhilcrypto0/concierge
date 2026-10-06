@@ -101,7 +101,7 @@ flowchart TD
 | **The model makes two judgment calls only**: intent and grounded answer | Lookups, policy math, approvals, and every reply that states an amount are plain code, so the assistant cannot misquote a refund | More code than "let the model figure it out" |
 | **Human approval with `interrupt()`, authority in Postgres** | The run pauses durably in the Postgres checkpointer; on resume it re-reads the approval row and refuses a mismatched amount, booking, or conversation | An operator must act before the customer gets an outcome |
 | **A reviewer can approve less, never more** | Approve in full, approve a lower amount, or reject. The policy amount computed in code is the ceiling: the API refuses anything above it and CHECK constraints in Postgres refuse it even from a direct write. The customer's message is filled from the stored amounts and says when it is less than requested | One more control for the operator to learn; a reviewer cannot raise an amount, so a goodwill refund above the policy amount needs a policy change in code |
-| **Exactly-once refunds** | An `actions` table keyed by idempotency key, a row lock on the approval, and a SQL guard against refunding more than was paid, in one transaction | Tested with 5 concurrent executions: 1 applies, 4 no-op |
+| **Exactly-once refunds, enforced twice** | An `actions` table keyed by idempotency key, a row lock on the approval, and a SQL guard against refunding more than was paid, in one transaction. A Postgres trigger independently refuses any action that no approved request covers, or that exceeds the authorised amount, even from a direct SQL write | Tested with 5 concurrent executions: 1 applies, 4 no-op |
 | **Per-conversation advisory lock** | A double-submit or a chat racing an approval never runs the graph twice on one thread; works across replicas | The losing request gets a 409 and must retry |
 | **Structured output + citation validation** | Answers are Pydantic objects; an answer citing a document it was not given is rejected as ungrounded | Some correct answers with sloppy citations become "I couldn't find that" |
 | **Search with the customer's words *and* the model's rewrite** | The rewrite resolves follow-ups; the customer's words protect against rewrite drift (see below) | Two searches per question (about 7 ms each) |
@@ -267,6 +267,8 @@ tests/          unit/ and integration/
 ```
 
 ## Known limitations and next steps
+
+The full list of threats, guards and residual risks is in [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md). The most important honest caveat: the agent eval is small (31 cases, one run), so its pass rates carry wide error bars; the money guarantee rests on the structure of the system, not on those numbers.
 
 - **The console login is one shared operator password** (a signed, HttpOnly cookie checked on the server), not per-person accounts or SSO, so every approval is recorded against the same operator identity. A team deployment needs individual accounts.
 - **Security headers are partial.** Frame, sniffing, referrer, and permissions policies ship; a strict script content policy needs per-request nonces and is still missing.
