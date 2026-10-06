@@ -4,9 +4,13 @@ import { PROOF, PROOF_HREF } from "@/lib/proof";
 
 const README_HREF = "https://github.com/nikhilcrypto0/concierge#readme";
 
+/** How many of the three walkthrough steps the visitor has actually completed. */
+export type TourProgress = 0 | 2 | 3;
+
 interface PitchBandProps {
   /** Opens the chat with the refund prompt filled in. */
   onTry: () => void;
+  progress: TourProgress;
 }
 
 const STATS = [
@@ -19,10 +23,10 @@ const STATS = [
 const STEPS = [
   "Ask the assistant to cancel BK-1042 and refund you.",
   "It applies the written refund policy, then waits. Nothing is paid yet.",
-  "A support lead approves, and your chat updates on its own.",
+  "A support lead approves, and your chat updates on its own. In this demo you can play the support lead.",
 ] as const;
 
-export function PitchBand({ onTry }: PitchBandProps) {
+export function PitchBand({ onTry, progress }: PitchBandProps) {
   return (
     <section aria-labelledby="pitch-heading" className="mx-auto w-full max-w-7xl px-4 pt-8 sm:px-6">
       <div className="rounded-3xl bg-ink-950 px-6 py-8 text-sand-50 sm:px-10 sm:py-10">
@@ -81,14 +85,28 @@ export function PitchBand({ onTry }: PitchBandProps) {
         <LiveStats />
 
         <ol className="mt-6 grid gap-3 border-t border-sand-50/15 pt-6 sm:grid-cols-3">
-          {STEPS.map((step, index) => (
-            <li key={step} className="flex gap-3 text-sm leading-snug text-sand-200">
-              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-sand-50/10 font-mono text-xs text-tide-100">
-                {index + 1}
-              </span>
-              {step}
-            </li>
-          ))}
+          {STEPS.map((step, index) => {
+            const done = index < progress;
+            return (
+              <li
+                key={step}
+                className={`flex gap-3 text-sm leading-snug ${done ? "text-sand-50" : "text-sand-200"}`}
+              >
+                <span
+                  aria-hidden
+                  className={`grid size-6 shrink-0 place-items-center rounded-full font-mono text-xs transition-colors ${
+                    done ? "bg-tide-500 text-ink-950" : "bg-sand-50/10 text-tide-100"
+                  }`}
+                >
+                  {done ? "✓" : index + 1}
+                </span>
+                <span>
+                  {step}
+                  {done && <span className="sr-only"> (done)</span>}
+                </span>
+              </li>
+            );
+          })}
         </ol>
       </div>
       <p className="mt-3 text-center text-xs text-ink-500">
