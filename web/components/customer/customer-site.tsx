@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 
 import { BookingsPanel } from "@/components/customer/bookings-panel";
 import { ChatWidget } from "@/components/customer/chat-widget";
+import { PitchBand } from "@/components/customer/pitch-band";
 import { SiteHeader } from "@/components/customer/site-header";
 import {
   ServicesSection,
@@ -44,16 +45,21 @@ export function CustomerSite() {
     setInput(`About booking ${booking.reference}: `);
   };
 
+  // Room for the docked chat. Only the content makes room; the header spans the full width.
+  const dock = `transition-[padding] duration-300 ${chatOpen ? "xl:pr-[420px]" : ""}`;
+
   return (
-    <div
-      className={`paper flex min-h-full flex-col transition-[padding] duration-300 ${
-        chatOpen ? "xl:pr-[420px]" : ""
-      }`}
-    >
+    <div className="paper flex min-h-full flex-col">
       <SiteHeader persona={persona} onPersonaChange={setPersonaId} />
 
-      <main className="flex-1">
-        <section className="mx-auto w-full max-w-7xl px-4 pt-10 pb-14 sm:px-6 lg:pt-16">
+      <main className={`flex-1 ${dock}`}>
+        <PitchBand
+          onTry={() => {
+            setChatOpen(true);
+            setInput("Cancel BK-1042 and refund me");
+          }}
+        />
+        <section className="mx-auto w-full max-w-7xl px-4 pt-10 pb-14 sm:px-6 lg:pt-12">
           <div className="grid items-start gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
             <div>
               <Pill tone="tide">Austin · Dallas · Houston · San Antonio · Denver</Pill>
@@ -98,7 +104,9 @@ export function CustomerSite() {
         <TrustSection />
       </main>
 
-      <SiteFooter />
+      <div className={dock}>
+        <SiteFooter />
+      </div>
 
       <ChatWidget
         persona={persona}
