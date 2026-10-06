@@ -46,6 +46,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const enc = encodeURIComponent;
 
 export const api = {
+  wake: () => request<{ awake: boolean }>("/api/wake"),
+
   chat: (body: { persona: PersonaId; message: string; conversationId?: string }) =>
     request<ChatReply>("/api/chat", { method: "POST", body: JSON.stringify(body) }),
 

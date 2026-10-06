@@ -14,6 +14,7 @@ import { Pill } from "@/components/ui/pill";
 import { useBookings } from "@/hooks/use-bookings";
 import { useChat } from "@/hooks/use-chat";
 import { useLocalStorage } from "@/hooks/use-local-storage";
+import { useWarmUp } from "@/hooks/use-warm-up";
 import { PERSONA_IDS, personaById, type PersonaId } from "@/lib/personas";
 import type { Booking } from "@/lib/types";
 
@@ -21,6 +22,7 @@ const isPersonaId = (value: string): value is PersonaId =>
   (PERSONA_IDS as readonly string[]).includes(value);
 
 export function CustomerSite() {
+  useWarmUp();
   const [personaId, setPersonaId] = useLocalStorage<PersonaId>(
     "concierge:persona",
     "maya",

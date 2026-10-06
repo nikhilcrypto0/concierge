@@ -32,6 +32,24 @@ function apiKey(role: Role): string | undefined {
     : process.env.CONCIERGE_OPERATOR_KEY;
 }
 
+const WAKE_TIMEOUT_MS = 60_000;
+
+/**
+ * Pings the API's public health check so a sleeping free-tier instance starts booting before
+ * the visitor sends a message. Needs no key and returns nothing but a yes or no.
+ */
+export async function wakeApi(): Promise<boolean> {
+  try {
+    const response = await fetch(new URL("/healthz", apiBaseUrl()), {
+      cache: "no-store",
+      signal: AbortSignal.timeout(WAKE_TIMEOUT_MS),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function errorResponse(status: number, message?: string): Response {
   return Response.json(
     { error: message ?? FRIENDLY_ERRORS[status] ?? "Something went wrong." },

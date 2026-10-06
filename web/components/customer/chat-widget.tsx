@@ -212,6 +212,11 @@ export function ChatWidget({
           )}
         </ul>
 
+        {chat.notice && (
+          <p role="status" className="mt-3 rounded-xl bg-sand-100 px-3 py-2 text-xs text-ink-700">
+            {chat.notice}
+          </p>
+        )}
         {chat.error && (
           <p role="status" className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">
             {chat.error}
