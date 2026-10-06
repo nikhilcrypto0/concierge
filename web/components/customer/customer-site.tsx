@@ -16,6 +16,7 @@ import { Pill } from "@/components/ui/pill";
 import { useBookings } from "@/hooks/use-bookings";
 import { useChat } from "@/hooks/use-chat";
 import { useLocalStorage } from "@/hooks/use-local-storage";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useWarmUp } from "@/hooks/use-warm-up";
 import { PERSONA_IDS, personaById, type PersonaId } from "@/lib/personas";
 import type { Booking } from "@/lib/types";
@@ -38,7 +39,13 @@ export function CustomerSite() {
   }, [refresh]);
   const chat = useChat({ persona, onBookingsMayHaveChanged });
 
-  const [chatOpen, setChatOpen] = useState(true);
+  // The chat docks beside the page on wide screens, so it starts open there. On a phone it is a
+  // full-height sheet, and opening it first would cover the pitch a visitor came to read, so it
+  // starts closed behind the launcher button. Once the visitor opens or closes it, that wins.
+  const wideScreen = useMediaQuery("(min-width: 1280px)");
+  const [chatPreference, setChatPreference] = useState<boolean | null>(null);
+  const chatOpen = chatPreference ?? wideScreen;
+  const setChatOpen = setChatPreference;
   const [input, setInput] = useState("");
 
   const askAbout = (booking: Booking) => {
