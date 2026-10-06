@@ -46,9 +46,9 @@ function OutcomeCard({ item, waiting }: { item: ChatItem; waiting: boolean }) {
           </summary>
           <Image
             src="/console-preview.jpg"
-            alt="The support console showing this refund request, the policy reason for the amount, and Approve and Reject buttons"
-            width={1426}
-            height={695}
+            alt="The support console showing this refund request, the policy reason for the amount, an optional lower amount, and Approve and Reject buttons"
+            width={1309}
+            height={679}
             className="mt-2 h-auto w-full rounded-lg border border-sand-300"
           />
           <p className="mt-1.5 text-ink-500">
