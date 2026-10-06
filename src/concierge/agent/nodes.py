@@ -5,6 +5,7 @@ values, never from model output, so the assistant cannot misquote a refund amoun
 """
 
 import asyncio
+import html
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -22,7 +23,7 @@ from concierge.bookings.models import Booking
 from concierge.bookings.policy import assess_refund
 from concierge.bookings.repository import ApprovalRequest, RefundConflictError
 from concierge.budget import BudgetExceededError, UsageLedger
-from concierge.guardrails import extract_booking_reference, sanitize
+from concierge.guardrails import extract_booking_reference, sanitize, sanitize_document
 from concierge.llm import LLMOutputError, SupportLLM
 from concierge.retrieval.search import RetrievedChunk, reciprocal_rank_fusion
 
@@ -95,6 +96,28 @@ def pending_approval_reply(payload: dict[str, Any]) -> str:
 def _format_when(iso: str) -> str:
     when = datetime.fromisoformat(iso).astimezone(UTC)
     return f"{when:%A, %B} {when.day} at {when:%H:%M} UTC"
+
+
+def _attr(value: str) -> str:
+    """Escape a value for use inside a quoted attribute of the <document> wrapper."""
+    return html.escape(value, quote=True)
+
+
+def _trusted_sources(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Clean every retrieved passage and drop the ones that try to instruct the model.
+
+    Retrieved text is untrusted: a tampered help-center article is an injection channel just
+    like a customer message. A quarantined passage is logged by id only, never explained, and
+    it cannot be cited because it never reaches the model.
+    """
+    trusted: list[dict[str, Any]] = []
+    for source in sources:
+        cleaned = sanitize_document(source["content"], source["title"], source["heading"])
+        if cleaned.quarantined:
+            log.warning("document.quarantined", chunk_id=source["id"])
+            continue
+        trusted.append({**source, "content": cleaned.text})
+    return trusted
 
 
 def _api_error_detail(exc: Exception) -> dict[str, Any]:
@@ -196,9 +219,13 @@ class SupportAgentNodes:
 
     async def answer(self, state: ConversationState, config: RunnableConfig) -> dict[str, Any]:
         conversation_id = UUID(state["conversation_id"])
-        sources = state.get("sources") or []
+        sources = _trusted_sources(state.get("sources") or [])
+        if not sources:
+            # Every retrieved passage was quarantined: nothing safe to answer from.
+            return {"outcome": "no_answer", "reply": REPLY_NO_ANSWER, "sources": []}
         documents = "\n\n".join(
-            f'<document id="{s["id"]}" title="{s["title"]} / {s["heading"]}">\n'
+            f'<document id="{_attr(s["id"])}" '
+            f'title="{_attr(s["title"])} / {_attr(s["heading"])}">\n'
             f"{s['content']}\n</document>"
             for s in sources
         )

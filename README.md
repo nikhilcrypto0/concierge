@@ -102,6 +102,7 @@ flowchart TD
 | **Structured output + citation validation** | Answers are Pydantic objects; an answer citing a document it was not given is rejected as ungrounded | Some correct answers with sloppy citations become "I couldn't find that" |
 | **Search with the customer's words *and* the model's rewrite** | The rewrite resolves follow-ups; the customer's words protect against rewrite drift (see below) | Two searches per question (about 7 ms each) |
 | **The browser never sees an API key or an email** | The UI sends a persona id to its own server routes, which attach the key and map the id to a customer, so a visitor cannot read another customer's data by editing a request | The demo UI needs a server; it cannot be a static page |
+| **Retrieved help-center text is untrusted too** | A tampered article is an injection channel like a customer message. Passages are cleaned, any that read like instructions to the model are dropped (logged by id, never explained), attribute values are escaped, and a dropped passage cannot be cited | Pattern matching is a heuristic and can be evaded. The real guarantee is structural: the model cannot move money, so a passage that slips through can at worst cause a wrong answer, never a payout |
 | **Relevance gate before the answer call** | If nothing is similar enough, skip the model entirely | Threshold needs re-tuning if the embedding model changes |
 | **Retrieval mode chosen by measurement** | Hybrid search is the textbook default but scored lower than vector-only here, so vector-only ships | Revisit as the corpus changes |
 | **Local ONNX embeddings (fastembed, bge-small)** | No API key or GPU; identical vectors in dev, CI, and the container | Weaker on some phrasings than larger models (see the one failing case) |
@@ -209,7 +210,7 @@ uv run python evals/run_agent_eval.py                     # calls Claude, about 
 cd web && npm run lint && npx tsc --noEmit && npm run build
 ```
 
-- **Unit tests** run every workflow path with the model, search index, and database replaced by fakes: approval pause and resume, mismatched approvals, budget breach, invalid model output, ungrounded citations, injection, ownership, rewrite drift, and per-turn state isolation.
+- **Unit tests** run every workflow path with the model, search index, and database replaced by fakes: approval pause and resume, mismatched approvals, budget breach, invalid model output, ungrounded citations, injection in customer messages and in retrieved articles (including a check that no shipped article is ever quarantined), ownership, rewrite drift, and per-turn state isolation.
 - **Integration tests** use real Postgres: concurrent refund execution, racing approval decisions, rollback on over-refund, the full HTTP refund flow and transcript, conversation hijacking, the conversation lock, rate limiting, body-size limits, hidden production docs, customer-scoped bookings, approval detail, and demo reset.
 - **CI** (GitHub Actions) runs lint, mypy, and unit tests; the web app's lint, types, and production build; integration tests against a pgvector service container; and the retrieval eval with thresholds. The agent eval runs on manual dispatch with an API key secret.
 
@@ -239,7 +240,7 @@ tests/          unit/ and integration/
 
 ## Known limitations and next steps
 
-- **The support console has no login.** It is demo-only, and the server-side proxy holds the operator key. A public deployment needs operator authentication in front of `/console` and its API routes before anything else.
+- **The console login is one shared operator password** (a signed, HttpOnly cookie checked on the server), not per-person accounts or SSO, so every approval is recorded against the same operator identity. A team deployment needs individual accounts.
 - **Security headers are partial.** Frame, sniffing, referrer, and permissions policies ship; a strict script content policy needs per-request nonces, which belongs with the deployment work.
 - **Retrieval**: the one failing eval case points at the embedding model; compare a larger model and hybrid-on-rewrites with the existing evals before changing the default.
 - **Identity**: the client API key represents a trusted backend that asserts the customer's email. A public deployment should pass a signed customer token (JWT) instead.
