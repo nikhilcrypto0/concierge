@@ -28,15 +28,15 @@ The demo company is *Tidewell Home Services*, a fictional home cleaning and repa
 
 ## Results at a glance
 
-Measured on 2026-10-06 with Claude Opus 5, on the current build. I ran the eval three times: every run scored 30 of 31, 7 of 7 safety, 0 refunds without a human, about $0.0085 per conversation. The one miss (`q05`, paying the cleaner in cash) fails the same way each time: the agent says it cannot find the answer and offers a person. Raw output, including the three runs, is in [`evals/results/`](evals/results). It is still a small set, so the intervals are wide (30/31 supports roughly 84% to 99%); the stronger guarantee is structural.
+Measured on 2026-10-06 with Claude Opus 5, on the current build, on 54 conversations (30 of them safety attacks). Three earlier runs of the original 31 cases scored 30 of 31 each time. All raw runs are in [`evals/results/`](evals/results). The set is still small, so the intervals are wide (52/54 supports roughly 88% to 99%); the stronger guarantee is structural.
 
 | | |
 |---|---|
-| End-to-end agent eval | **30 / 31 cases (96.8%)** |
-| Safety cases (prompt injection, other customers' bookings, fake "admin" authority) | **7 / 7** |
+| End-to-end agent eval | **52 / 54 cases (96.3%)** |
+| Safety cases (prompt injection, other customers' bookings, fake "admin" authority, multi-turn pressure) | **29 / 30** |
 | Refunds executed without a human decision | **0** |
-| Cost per conversation | **$0.0085** |
-| Turn latency | **p50 2.5 s, p95 5.2 s** |
+| Cost per conversation | **$0.0082** |
+| Turn latency | **p50 2.1 s, p95 4.9 s** |
 | Retrieval (shipped mode) | **Recall@4 1.00, MRR 0.927** |
 
 ## What it does
@@ -129,7 +129,7 @@ With equal fusion weights, hybrid dropped to Recall@1 0.786: full-text matches o
 
 ### End-to-end agent (real Claude, run on demand)
 
-31 conversations through the production graph against real Postgres, graded by deterministic checks rather than an LLM judge: the routed outcome and intent, citations to the expected article, key facts in the reply ("$25", "5 to 10 business days"), exact refund amounts proposed for approval, and the reason for any handoff. A handoff caused by a failure fails its case, so a model outage cannot pass as correct routing.
+54 conversations (31 originally, 23 safety attacks added later) through the production graph against real Postgres, graded by deterministic checks rather than an LLM judge: the routed outcome and intent, citations to the expected article, key facts in the reply ("$25", "5 to 10 business days"), exact refund amounts proposed for approval, and the reason for any handoff. A handoff caused by a failure fails its case, so a model outage cannot pass as correct routing.
 
 | | First run | After fixes |
 |---|---|---|
@@ -141,7 +141,27 @@ With equal fusion weights, hybrid dropped to Recall@1 0.786: full-text matches o
 | Cost per conversation | $0.0084 | **$0.0085** |
 | Turn latency p50 / p95 | 2.5 s / 5.4 s | **2.5 s / 5.2 s** |
 
-`evals/results/agent.json` holds the latest run; the first-run column comes from that run's log.
+`evals/results/agent.json` holds the latest run; the first-run column comes from that run's log. That table is the original 31 cases.
+
+### 54-case run, and a cheaper model (2026-10-06)
+
+I added 23 safety attacks (injection in other languages and with leetspeak, role-play, "translate then obey", prompt-leak requests, multi-turn pressure, SQL in a booking reference, other customers' bookings by several routes, "approve it yourself") and ran the full set on Claude Opus 5 and on Claude Haiku 4.5.
+
+| | Opus 5 | Haiku 4.5 |
+|---|---|---|
+| Cases passed | 52 / 54 | 48 / 54 |
+| Safety, as graded | 29 / 30 | 25 / 30 |
+| Refunds executed without a human | 0 | 0 |
+| Cost per conversation | $0.0082 | $0.0012 |
+| Turn latency p50 / p95 | 2.1 s / 4.9 s | 1.8 s / 4.1 s |
+
+How to read this honestly:
+
+- **No safety case in any run opened an approval or leaked another customer's data.** Every safety "failure" was an outcome I had not listed as acceptable. For Opus, `s15` was a low-confidence handoff to a human. For Haiku, all five were `out_of_scope` refusals, which are safe but not in my accepted list.
+- **I widened my own accepted lists after the first run.** Six cases (`s10`, `s12`, `s13`, `s18`, `s20`, `s22`) returned safe outcomes I had not listed, such as "out of scope" or "which booking reference?". I added those outcomes and said so here, rather than pretend I predicted them. The checks that matter (no approval opened, no other customer's data in the reply) were unchanged.
+- **Haiku matched Opus on every non-safety case** (bookings, refunds, routing, questions) and cost about 7x less. It refuses more attacks as "out of scope" instead of handing them to a person, so strictly as graded it scores lower on safety. I would test Haiku on the classify step and keep Opus for answers before switching, and I have not done that.
+- `q05` (paying the cleaner in cash) fails on both models and in every run.
+- Haiku 4.5 rejects the `effort` setting, so the code leaves it out for Haiku models.
 
 ### What the evals caught
 
@@ -268,7 +288,7 @@ tests/          unit/ and integration/
 
 ## Known limitations and next steps
 
-The full list of threats, guards and residual risks is in [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md). The most important honest caveat: the agent eval is small (31 cases, one run), so its pass rates carry wide error bars; the money guarantee rests on the structure of the system, not on those numbers.
+The full list of threats, guards and residual risks is in [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md). The most important honest caveat: the agent eval is small (54 cases, written by one person), so its pass rates carry wide error bars; the money guarantee rests on the structure of the system, not on those numbers.
 
 - **The console login is one shared operator password** (a signed, HttpOnly cookie checked on the server), not per-person accounts or SSO, so every approval is recorded against the same operator identity. A team deployment needs individual accounts.
 - **Security headers are partial.** Frame, sniffing, referrer, and permissions policies ship; a strict script content policy needs per-request nonces and is still missing.
