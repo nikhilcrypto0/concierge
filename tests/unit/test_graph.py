@@ -90,7 +90,7 @@ class FakeBookings:
 
     def record_decision(
         self, conversation_id: UUID, request: dict[str, Any], status: ApprovalStatus,
-        amount_cents: int | None = None,
+        amount_cents: int | None = None, approved_amount_cents: int | None = None,
     ) -> UUID:
         approval_id = uuid4()
         self.approvals[approval_id] = ApprovalRequest(
@@ -99,6 +99,7 @@ class FakeBookings:
             amount_cents=amount_cents or request["amount_cents"],
             policy_reason=request["policy_reason"], status=status, reviewer="lead",
             review_note=None, created_at=NOW, decided_at=NOW,
+            approved_amount_cents=approved_amount_cents,
         )
         return approval_id
 

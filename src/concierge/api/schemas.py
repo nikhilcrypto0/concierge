@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from concierge.bookings.models import Booking
 from concierge.bookings.repository import ApprovalRequest
@@ -87,6 +87,9 @@ class ApprovalOut(BaseModel):
     action: str
     amount_cents: int
     amount: str
+    # What the reviewer actually authorised when it was less than the policy amount.
+    approved_amount_cents: int | None = None
+    approved_amount: str | None = None
     policy_reason: str
     status: Literal["pending", "approved", "rejected"]
     reviewer: str | None
@@ -96,7 +99,14 @@ class ApprovalOut(BaseModel):
 
     @classmethod
     def from_domain(cls, approval: ApprovalRequest) -> Self:
-        return cls(**approval.__dict__, amount=_dollars(approval.amount_cents))
+        approved = approval.approved_amount_cents
+        fields = {k: v for k, v in approval.__dict__.items() if k != "approved_amount_cents"}
+        return cls(
+            **fields,
+            amount=_dollars(approval.amount_cents),
+            approved_amount_cents=approved,
+            approved_amount=_dollars(approved) if approved is not None else None,
+        )
 
 
 class ApprovalDetail(BaseModel):
@@ -110,6 +120,17 @@ class DecisionRequest(BaseModel):
 
     approve: bool
     note: str | None = Field(default=None, max_length=500)
+    approved_amount_cents: int | None = Field(
+        default=None,
+        gt=0,
+        description="Approve LESS than the policy amount. Omit to approve the full amount.",
+    )
+
+    @model_validator(mode="after")
+    def _amount_only_with_approval(self) -> Self:
+        if self.approved_amount_cents is not None and not self.approve:
+            raise ValueError("an amount can only accompany an approval")
+        return self
 
 
 class DecisionResponse(BaseModel):

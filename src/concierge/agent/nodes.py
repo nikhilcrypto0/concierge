@@ -336,7 +336,9 @@ class SupportAgentNodes:
         ):
             raise ValueError("resume payload does not match this conversation's refund request")
 
-        reference, amount = approval.booking_reference, f"${approval.amount_cents / 100:.2f}"
+        reference = approval.booking_reference
+        amount = f"${approval.authorised_cents / 100:.2f}"
+        requested = f"${approval.amount_cents / 100:.2f}"
         if approval.status == "rejected":
             return {"outcome": "refund_rejected", "reply": (
                 f"Our support team reviewed the refund request for booking {reference} and "
@@ -350,9 +352,14 @@ class SupportAgentNodes:
             log.error("refund.conflict")
             return _handoff("refund_conflict")
         log.info("refund.executed", newly_applied=applied)
+        # The wording "has been approved" is what the web UI keys on; keep it in both replies.
+        adjusted = (
+            f" This is less than the {requested} originally requested."
+            if approval.authorised_cents < approval.amount_cents else ""
+        )
         return {"outcome": "refund_completed", "reply": (
-            f"Your refund of {amount} for booking {reference} has been approved. It will appear "
-            "on your original payment method within 5 to 10 business days."
+            f"Your refund of {amount} for booking {reference} has been approved.{adjusted} "
+            "It will appear on your original payment method within 5 to 10 business days."
         )}
 
     async def handoff(self, state: ConversationState) -> dict[str, Any]:

@@ -63,7 +63,10 @@ export const api = {
 
   approval: (id: string) => request<ApprovalDetail>(`/api/approvals/${enc(id)}`),
 
-  decide: (id: string, body: { approve: boolean; note?: string }) =>
+  decide: (
+    id: string,
+    body: { approve: boolean; note?: string; approved_amount_cents?: number },
+  ) =>
     request<DecisionResult>(`/api/approvals/${enc(id)}/decision`, {
       method: "POST",
       body: JSON.stringify(body),

@@ -16,7 +16,8 @@ export interface ApprovalQueueController {
   deciding: boolean;
   lastDecision: DecisionResult | null;
   error: string | null;
-  decide: (approve: boolean, note: string) => Promise<void>;
+  /** `approvedAmountCents` approves LESS than the policy amount; omit it for the full amount. */
+  decide: (approve: boolean, note: string, approvedAmountCents?: number) => Promise<void>;
   resetDemo: () => Promise<void>;
   resetting: boolean;
 }
@@ -108,7 +109,7 @@ export function useApprovalQueue(): ApprovalQueueController {
   }, [selectedId]);
 
   const decide = useCallback(
-    async (approve: boolean, note: string) => {
+    async (approve: boolean, note: string, approvedAmountCents?: number) => {
       if (!selectedId || deciding) return;
       setDeciding(true);
       setError(null);
@@ -116,6 +117,7 @@ export function useApprovalQueue(): ApprovalQueueController {
         const result = await api.decide(selectedId, {
           approve,
           note: note.trim() || undefined,
+          approved_amount_cents: approvedAmountCents,
         });
         setLastDecision(result);
         setDetailState((current) =>

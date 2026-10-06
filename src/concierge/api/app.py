@@ -298,12 +298,20 @@ def create_app(
             raise HTTPException(status.HTTP_404_NOT_FOUND, "approval not found")
         conversation_id = existing.conversation_id
         structlog.contextvars.bind_contextvars(conversation_id=str(conversation_id))
+        requested = body.approved_amount_cents
+        if requested is not None and requested > existing.amount_cents:
+            # The policy amount is a ceiling a reviewer can lower but never raise.
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                "approved amount cannot exceed the policy amount")
+        # Approving the full amount is a plain approval, so "adjusted" always means lower.
+        adjusted = requested if requested is not None and requested < existing.amount_cents \
+            else None
 
         async with conversation_lock(state.pool, conversation_id) as acquired:
             if not acquired:
                 raise BUSY
             decided = await repository.decide_approval(approval_id, body.approve,
-                                                       principal.name, body.note)
+                                                       principal.name, body.note, adjusted)
             if decided is None:
                 current = await repository.get_approval(approval_id) or existing
                 paused = await state.graph.aget_state(_thread(conversation_id))

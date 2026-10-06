@@ -47,6 +47,9 @@ export interface Approval {
   action: string;
   amount_cents: number;
   amount: string;
+  /** Set only when the reviewer approved less than the policy amount. */
+  approved_amount_cents: number | null;
+  approved_amount: string | null;
   policy_reason: string;
   status: ApprovalStatus;
   reviewer: string | null;
