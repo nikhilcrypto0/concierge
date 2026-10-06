@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef } from "react";
 
 import type { ChatController, ChatItem } from "@/hooks/use-chat";
@@ -39,6 +40,21 @@ function OutcomeCard({ item, waiting }: { item: ChatItem; waiting: boolean }) {
         <p className="mt-1 text-xs text-ink-700">
           The assistant cannot issue this refund. A person has to approve it first.
         </p>
+        <details className="mt-2 text-xs text-ink-700">
+          <summary className="cursor-pointer font-medium text-tide-700">
+            See what the support lead sees
+          </summary>
+          <Image
+            src="/console-preview.jpg"
+            alt="The support console showing this refund request, the policy reason for the amount, and Approve and Reject buttons"
+            width={1426}
+            height={695}
+            className="mt-2 h-auto w-full rounded-lg border border-sand-300"
+          />
+          <p className="mt-1.5 text-ink-500">
+            The console is password protected, so this is a screenshot of it.
+          </p>
+        </details>
       </div>
     );
   }
