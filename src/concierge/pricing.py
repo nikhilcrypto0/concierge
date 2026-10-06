@@ -4,6 +4,7 @@
 PRICES: dict[str, tuple[float, float]] = {
     "claude-opus-5": (5.0, 25.0),
     "claude-sonnet-5": (2.0, 10.0),
+    "claude-haiku-4-5-20251001": (1.0, 5.0),
 }
 # A model we have no price for is charged at the most expensive tier, so an unknown model can
 # only make the reported cost look worse, never better. Callers also get told it was unpriced.

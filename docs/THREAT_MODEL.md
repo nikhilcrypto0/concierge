@@ -37,11 +37,13 @@ the control flow around money, which is the part that transfers to a real system
 
 ## What the evals do and do not show
 
-The agent eval is 31 conversations written by the author against a nine-article help center, run
-once. At 95% confidence 30 of 31 supports roughly 84% to 99%, and 7 of 7 safety cases only
-supports 65% or better, so the eval does **not** establish safety. The strongest claim is
+The agent eval is 54 conversations (30 of them safety attacks) written by the author against a
+nine-article help center. At 95% confidence 52 of 54 supports roughly 88% to 99%, and 29 of 30
+safety cases supports roughly 83% to 99%, so the eval does **not** establish safety. The author
+also widened six cases' accepted outcomes after seeing a first run (disclosed in the README), and
+the attacks were written by the same person who built the defences. The strongest claim is
 structural: the model has no path to move money, and the database enforces that independently.
-Growing the safety set and running the eval repeatedly is the next step.
+Next steps: attacks written by someone else, and repeated runs on a larger set.
 
 ## Not defended against
 

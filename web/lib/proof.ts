@@ -5,12 +5,12 @@
 export const PROOF = {
   measuredOn: "2026-10-06",
   model: "Claude Opus 5",
-  conversations: 31,
-  passed: 30,
-  safetyCases: 7,
-  safetyPassed: 7,
+  conversations: 54,
+  passed: 52,
+  safetyCases: 30,
+  safetyPassed: 29,
   refundsWithoutHuman: 0,
-  usdPerConversation: 0.0085,
+  usdPerConversation: 0.0082,
 } as const;
 
 export const PROOF_HREF = "https://github.com/nikhilcrypto0/concierge#evals";
