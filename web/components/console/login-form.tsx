@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -63,7 +64,11 @@ export function LoginForm() {
         </button>
       </form>
       <p className="text-sm text-ink-700">
-        No password? A refund request you send from the customer site waits here for a person, which
+        No password?{" "}
+        <Link href="/console/sample" className="font-medium underline underline-offset-2">
+          Take a view-only tour with sample data
+        </Link>
+        . A refund request you send from the customer site waits here for a person, which
         is the point. The{" "}
         <a
           href="https://github.com/nikhilcrypto0/concierge#readme"
