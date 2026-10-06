@@ -11,7 +11,17 @@ interface ApprovalDetailProps {
   loading: boolean;
   deciding: boolean;
   lastDecision: DecisionResult | null;
-  onDecide: (approve: boolean, note: string) => Promise<void>;
+  onDecide: (approve: boolean, note: string, approvedAmountCents?: number) => Promise<void>;
+}
+
+const DOLLARS = /^\d+(\.\d{1,2})?$/;
+
+/** Whole cents from a typed dollar amount, or null when it is not a plain positive amount. */
+function parseDollarsToCents(text: string): number | null {
+  const trimmed = text.trim();
+  if (!DOLLARS.test(trimmed)) return null;
+  const cents = Math.round(Number(trimmed) * 100);
+  return cents > 0 ? cents : null;
 }
 
 function Transcript({ detail }: { detail: Detail }) {
@@ -96,6 +106,7 @@ export function ApprovalDetailPanel({
   onDecide,
 }: ApprovalDetailProps) {
   const [note, setNote] = useState("");
+  const [amountText, setAmountText] = useState("");
 
   if (loading && !detail) {
     return <div className="h-full animate-pulse rounded-2xl bg-sand-200/60" />;
@@ -117,6 +128,15 @@ export function ApprovalDetailPanel({
 
   const { approval } = detail;
   const pending = approval.status === "pending";
+  // An empty field means "approve the full policy amount". Anything typed must be a plain
+  // amount no higher than the policy amount, which the server enforces as well.
+  const typedCents = amountText.trim() === "" ? null : parseDollarsToCents(amountText);
+  const amountInvalid =
+    amountText.trim() !== "" && (typedCents === null || typedCents > approval.amount_cents);
+  const lowered = typedCents !== null && typedCents < approval.amount_cents;
+  const approveLabel = lowered
+    ? `Approve $${(typedCents / 100).toFixed(2)}`
+    : `Approve ${approval.amount}`;
 
   return (
     <div className="grid min-h-0 gap-4 lg:grid-cols-[1.2fr_1fr]">
@@ -161,14 +181,33 @@ export function ApprovalDetailPanel({
                 className="mt-1 w-full resize-none rounded-xl border border-sand-300 bg-sand-50 px-3 py-2 text-sm text-ink-900 placeholder:text-ink-300 focus:border-tide-600 focus:outline-none"
               />
             </label>
+            <label className="block text-sm">
+              <span className="text-ink-500">
+                Approve a different amount (optional, at most {approval.amount})
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amountText}
+                onChange={(event) => setAmountText(event.target.value)}
+                placeholder={approval.amount.replace("$", "")}
+                aria-invalid={amountInvalid}
+                className="mt-1 w-full rounded-xl border border-sand-300 bg-sand-50 px-3 py-2 font-mono text-sm text-ink-900 placeholder:text-ink-300 focus:border-tide-600 focus:outline-none aria-[invalid=true]:border-rose-400"
+              />
+              {amountInvalid && (
+                <span role="alert" className="mt-1 block text-xs text-rose-700">
+                  Enter an amount like 120 or 120.50, no higher than {approval.amount}.
+                </span>
+              )}
+            </label>
             <div className="flex gap-2">
               <button
                 type="button"
-                disabled={deciding}
-                onClick={() => void onDecide(true, note)}
+                disabled={deciding || amountInvalid}
+                onClick={() => void onDecide(true, note, lowered ? (typedCents ?? undefined) : undefined)}
                 className="flex-1 rounded-xl bg-tide-600 px-4 py-2.5 text-sm font-medium text-white transition-colors enabled:hover:bg-tide-700 disabled:opacity-50"
               >
-                {deciding ? "Working…" : `Approve ${approval.amount}`}
+                {deciding ? "Working…" : approveLabel}
               </button>
               <button
                 type="button"
@@ -187,6 +226,11 @@ export function ApprovalDetailPanel({
               <span className="font-medium">{approval.reviewer ?? "unknown"}</span>
               {approval.decided_at && <> · {timeAgo(approval.decided_at)}</>}
             </p>
+            {approval.status === "approved" && approval.approved_amount && (
+              <p className="mt-1 text-ink-700">
+                Approved {approval.approved_amount} of the {approval.amount} requested.
+              </p>
+            )}
             {approval.review_note && (
               <p className="mt-1 text-ink-700">Note: {approval.review_note}</p>
             )}

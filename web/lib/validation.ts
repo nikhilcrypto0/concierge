@@ -13,6 +13,8 @@ export const chatBodySchema = z.object({
 export const decisionBodySchema = z.object({
   approve: z.boolean(),
   note: z.string().trim().max(500).optional(),
+  // Approve LESS than the policy amount; the API rejects anything above it.
+  approved_amount_cents: z.number().int().positive().optional(),
 });
 
 export const approvalStatusSchema = z.enum(["pending", "approved", "rejected"]);

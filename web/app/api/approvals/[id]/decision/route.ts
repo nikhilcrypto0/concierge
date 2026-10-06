@@ -17,6 +17,14 @@ export async function POST(
   }
   return forward("operator", `/v1/approvals/${id}/decision`, {
     method: "POST",
-    body: { approve: parsed.data.approve, note: parsed.data.note || null },
+    body: {
+      approve: parsed.data.approve,
+      note: parsed.data.note || null,
+      // Sent only when a lower amount was chosen, so plain approvals still work against an API
+      // that has not been redeployed yet (it rejects fields it does not know).
+      ...(parsed.data.approved_amount_cents === undefined
+        ? {}
+        : { approved_amount_cents: parsed.data.approved_amount_cents }),
+    },
   });
 }

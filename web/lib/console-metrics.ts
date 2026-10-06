@@ -1,6 +1,6 @@
 // Queue health derived from the approval records the console already fetches.
 // Nothing here calls the API: if a figure appears on screen, it was computed from
-// created_at, decided_at, status and amount_cents on real rows.
+// created_at, decided_at, status, amount_cents and approved_amount_cents on real rows.
 
 import type { Approval } from "@/lib/types";
 
@@ -64,7 +64,10 @@ export function computeMetrics(
     ).length,
     approvedTotal: approved.length,
     rejectedTotal: history.filter((approval) => approval.status === "rejected").length,
-    refundedCents: approved.reduce((total, approval) => total + approval.amount_cents, 0),
+    refundedCents: approved.reduce(
+      (total, approval) => total + (approval.approved_amount_cents ?? approval.amount_cents),
+      0,
+    ),
     medianDecisionMs: median(
       history.map(decisionMs).filter((value): value is number => value !== null),
     ),

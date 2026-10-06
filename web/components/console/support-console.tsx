@@ -81,6 +81,8 @@ export function SupportConsole() {
         />
         <div className="min-h-[520px]">
           <ApprovalDetailPanel
+            // A fresh panel per request, so a typed amount never carries over to another one.
+            key={queue.detail?.approval.id ?? "none"}
             detail={queue.detail}
             loading={queue.detailLoading}
             deciding={queue.deciding}

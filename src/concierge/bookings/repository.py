@@ -29,6 +29,13 @@ class ApprovalRequest:
     created_at: datetime
     decided_at: datetime | None
     customer_email: str | None = None  # present when the query joins conversations
+    # What the reviewer actually authorised; None means the full policy amount.
+    approved_amount_cents: int | None = None
+
+    @property
+    def authorised_cents(self) -> int:
+        """The amount that may be refunded: never above the policy amount, by constraint."""
+        return self.approved_amount_cents or self.amount_cents
 
 
 class RefundConflictError(RuntimeError):
@@ -160,18 +167,25 @@ class SupportRepository:
             return [_approval(row) for row in await cur.fetchall()]
 
     async def decide_approval(
-        self, approval_id: UUID, approve: bool, reviewer: str, note: str | None
+        self, approval_id: UUID, approve: bool, reviewer: str, note: str | None,
+        approved_amount_cents: int | None = None,
     ) -> ApprovalRequest | None:
-        """Atomic pending -> decided transition. None if already decided or never existed."""
+        """Atomic pending -> decided transition. None if already decided or never existed.
+
+        `approved_amount_cents` authorises less than the policy amount. The database refuses
+        anything above the policy amount, or any amount on a rejection.
+        """
         async with self._pool.connection() as conn:
             cur = await conn.execute(
                 """
                 UPDATE approval_requests
-                SET status = %s, reviewer = %s, review_note = %s, decided_at = now()
+                SET status = %s, reviewer = %s, review_note = %s, decided_at = now(),
+                    approved_amount_cents = %s
                 WHERE id = %s AND status = 'pending'
                 RETURNING *
                 """,
-                ("approved" if approve else "rejected", reviewer, note, approval_id),
+                ("approved" if approve else "rejected", reviewer, note,
+                 approved_amount_cents, approval_id),
             )
             row = await cur.fetchone()
         return _approval(row) if row else None
@@ -186,6 +200,7 @@ class SupportRepository:
             approval = await cur.fetchone()
             if approval is None:
                 raise PermissionError("refund requires an approved approval request")
+            authorised = approval["approved_amount_cents"] or approval["amount_cents"]
             cur = await conn.execute(
                 """
                 INSERT INTO actions
@@ -195,7 +210,7 @@ class SupportRepository:
                 RETURNING idempotency_key
                 """,
                 (f"refund:{approval_id}", approval_id, approval["booking_reference"],
-                 approval["amount_cents"]),
+                 authorised),
             )
             if await cur.fetchone() is None:
                 return False
@@ -207,7 +222,7 @@ class SupportRepository:
                 WHERE reference = %(ref)s AND refunded_cents + %(amount)s <= amount_cents
                 RETURNING reference
                 """,
-                {"amount": approval["amount_cents"], "ref": approval["booking_reference"]},
+                {"amount": authorised, "ref": approval["booking_reference"]},
             )
             if await cur.fetchone() is None:
                 raise RefundConflictError(approval["booking_reference"])
