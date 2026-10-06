@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api, ApiRequestError } from "@/lib/api-client";
 import type { Persona } from "@/lib/personas";
-import type { ChatStatus, Source } from "@/lib/types";
+import type { ChatReply, ChatStatus, Source } from "@/lib/types";
 import { usePolling } from "@/hooks/use-polling";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 
@@ -28,6 +28,16 @@ const REJECTED_MARK = "couldn't approve";
 
 const CONVERSATION_GONE =
   "That conversation was cleared. Send your message again to start a new one.";
+
+// The demo's free API host sleeps when idle and takes up to a minute to boot. While it does, the
+// site answers 502, 503 or 504; retry quietly instead of showing an error.
+const API_STARTING_STATUSES = new Set([502, 503, 504]);
+const WAKE_RETRY_DELAY_MS = 8_000;
+const MAX_WAKE_RETRIES = 8;
+const WAKING_NOTICE =
+  "The assistant was asleep and is waking up. This can take up to a minute, so hang on.";
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function outcomeFromReply(content: string): string | null {
   if (content.includes(APPROVED_MARK)) return "refund_completed";
@@ -55,6 +65,8 @@ export interface ChatController {
   sending: boolean;
   awaitingApproval: boolean;
   error: string | null;
+  /** A non-error status line, for example while the API host wakes up. */
+  notice: string | null;
   send: (text: string) => Promise<void>;
   startNewConversation: () => void;
 }
@@ -69,6 +81,7 @@ export function useChat({ persona, onBookingsMayHaveChanged }: UseChatOptions): 
   const [sending, setSending] = useState(false);
   const [awaitingApproval, setAwaitingApproval] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   // How many transcript messages existed when the refund went to a human.
   const pausedAtRef = useRef<number | null>(null);
   // Which persona + conversation the messages on screen belong to. Keeps a live reply (with its
@@ -142,11 +155,23 @@ export function useChat({ persona, onBookingsMayHaveChanged }: UseChatOptions): 
       ]);
       setSending(true);
       try {
-        const reply = await api.chat({
-          persona: sendingFor,
-          message,
-          conversationId: conversationId ?? undefined,
-        });
+        let reply: ChatReply | null = null;
+        for (let attempt = 0; reply === null; attempt += 1) {
+          try {
+            reply = await api.chat({
+              persona: sendingFor,
+              message,
+              conversationId: conversationId ?? undefined,
+            });
+          } catch (failure: unknown) {
+            const starting =
+              failure instanceof ApiRequestError && API_STARTING_STATUSES.has(failure.status);
+            if (!starting || attempt >= MAX_WAKE_RETRIES) throw failure;
+            setNotice(WAKING_NOTICE);
+            await wait(WAKE_RETRY_DELAY_MS);
+          }
+        }
+        setNotice(null);
         // The visitor may have switched persona while this was in flight; that reply belongs to
         // the other account's thread, not the one now on screen.
         if (personaRef.current !== sendingFor) return;
@@ -187,6 +212,7 @@ export function useChat({ persona, onBookingsMayHaveChanged }: UseChatOptions): 
           failure instanceof ApiRequestError ? failure.message : "Something went wrong.",
         );
       } finally {
+        setNotice(null);
         setSending(false);
       }
     },
@@ -225,5 +251,5 @@ export function useChat({ persona, onBookingsMayHaveChanged }: UseChatOptions): 
     setConversationId(null);
   }, [forget, setConversationId]);
 
-  return { messages, sending, awaitingApproval, error, send, startNewConversation };
+  return { messages, sending, awaitingApproval, error, notice, send, startNewConversation };
 }

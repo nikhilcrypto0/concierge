@@ -10,9 +10,11 @@ import { ResetDemoButton } from "@/components/console/reset-demo-button";
 import { LiveDot } from "@/components/ui/pill";
 import { useApprovalQueue } from "@/hooks/use-approvals";
 import { useNow } from "@/hooks/use-now";
+import { useWarmUp } from "@/hooks/use-warm-up";
 import { computeMetrics } from "@/lib/console-metrics";
 
 export function SupportConsole() {
+  useWarmUp();
   const queue = useApprovalQueue();
   const { pending, history } = queue;
   const now = useNow();
