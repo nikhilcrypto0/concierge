@@ -233,12 +233,16 @@ class SupportRepository:
                 raise RefundConflictError(approval["booking_reference"])
         return True
 
-    async def demo_data_is_stale(self, max_age: timedelta, quiet_for: timedelta) -> bool:
+    async def demo_data_is_stale(
+        self, max_age: timedelta, quiet_for: timedelta, pending_grace: timedelta
+    ) -> bool:
         """True when the demo bookings are old enough that their refund tiers have drifted.
 
         Seeded times are relative to the moment of seeding (a booking "6 hours away" stops being
         late-notice once that time passes). Reseeding wipes conversations, so it only counts as
-        due when nobody is mid-demo: no refund waiting for a person and no chat for `quiet_for`.
+        due when nobody is mid-demo: no chat for `quiet_for` and no refund that was requested
+        within `pending_grace` and is still waiting for a person. A request nobody has touched
+        for longer than that is abandoned, and must not freeze the demo data forever.
         """
         async with self._pool.connection() as conn:
             cur = await conn.execute(
@@ -246,10 +250,11 @@ class SupportRepository:
                 SELECT
                     (SELECT now() - (scheduled_for - %(lead)s) FROM bookings
                      WHERE reference = %(ref)s) AS age,
-                    (SELECT count(*) FROM approval_requests WHERE status = 'pending') AS pending,
+                    (SELECT count(*) FROM approval_requests
+                     WHERE status = 'pending' AND created_at > now() - %(grace)s) AS pending,
                     (SELECT now() - max(created_at) FROM llm_usage) AS idle
                 """,
-                {"ref": DEMO_CLOCK_BOOKING, "lead": DEMO_CLOCK_LEAD},
+                {"ref": DEMO_CLOCK_BOOKING, "lead": DEMO_CLOCK_LEAD, "grace": pending_grace},
             )
             row = await cur.fetchone()
         if row is None or row["age"] is None:

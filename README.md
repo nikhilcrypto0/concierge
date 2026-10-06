@@ -46,6 +46,7 @@ Measured on 2026-09-13 with Claude Opus 5. Raw output is in [`evals/results/`](e
 - **Handles refunds** by applying the written policy in code, then **pausing the workflow** until a person approves in full, approves a lower amount, or rejects. The approved refund is applied exactly once, even under retries and concurrent clicks.
 - **Hands off to a human** for complaints, damage, low-confidence routing, model outages, and budget breaches, and records *why*.
 - **Blocks prompt injection** before any model call, treats retrieved help-center text as untrusted too, and never tells the sender why.
+- Lets visitors **try to break it**: a panel on the demo site sends four real attacks (ignore your rules, someone else's booking, a fake manager, a refund you are not owed) to the live agent and shows the outcome the system actually returned.
 - Exposes read-only tools over **MCP**, so Claude Code, Claude Desktop, or Cursor can search the help center and look up bookings.
 
 ## Architecture
