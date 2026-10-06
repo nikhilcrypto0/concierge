@@ -7,6 +7,7 @@ import type {
   Booking,
   ChatReply,
   DecisionResult,
+  Stats,
   TranscriptMessage,
 } from "@/lib/types";
 import type { PersonaId } from "@/lib/personas";
@@ -47,6 +48,8 @@ const enc = encodeURIComponent;
 
 export const api = {
   wake: () => request<{ awake: boolean }>("/api/wake"),
+
+  stats: () => request<Stats>("/api/stats"),
 
   chat: (body: { persona: PersonaId; message: string; conversationId?: string }) =>
     request<ChatReply>("/api/chat", { method: "POST", body: JSON.stringify(body) }),

@@ -11,6 +11,7 @@ from uuid import UUID
 import structlog
 
 from concierge.db import DictPool
+from concierge.pricing import cost_usd, is_priced
 
 log = structlog.get_logger(__name__)
 
@@ -76,6 +77,53 @@ class PostgresUsageLedger:
             )
         log.info("llm.usage", step=step, model=model, input_tokens=input_tokens,
                  output_tokens=output_tokens)
+
+
+@dataclass(frozen=True)
+class UsageSummary:
+    """What the model calls over a window actually cost, from the same ledger the budgets use."""
+
+    hours: int
+    conversations: int  # conversations that reached a model (blocked messages never do)
+    tokens: int
+    usd: float
+    unpriced_models: tuple[str, ...]
+
+    @property
+    def usd_per_conversation(self) -> float | None:
+        return self.usd / self.conversations if self.conversations else None
+
+
+async def usage_summary(pool: DictPool, hours: int = 24) -> UsageSummary:
+    async with pool.connection() as conn:
+        cur = await conn.execute(
+            """
+            SELECT model,
+                   COUNT(DISTINCT conversation_id) AS conversations,
+                   COALESCE(SUM(input_tokens), 0) AS input,
+                   COALESCE(SUM(output_tokens), 0) AS output
+            FROM llm_usage
+            WHERE created_at >= now() - make_interval(hours => %s)
+            GROUP BY model
+            """,
+            (hours,),
+        )
+        by_model = await cur.fetchall()
+        cur = await conn.execute(
+            "SELECT COUNT(DISTINCT conversation_id) AS n FROM llm_usage"
+            " WHERE created_at >= now() - make_interval(hours => %s)",
+            (hours,),
+        )
+        total = await cur.fetchone()
+    assert total is not None
+    return UsageSummary(
+        hours=hours,
+        conversations=int(total["n"]),
+        tokens=sum(int(r["input"]) + int(r["output"]) for r in by_model),
+        usd=sum(cost_usd(str(r["model"]), int(r["input"]), int(r["output"])) for r in by_model),
+        unpriced_models=tuple(sorted(str(r["model"]) for r in by_model
+                                     if not is_priced(str(r["model"])))),
+    )
 
 
 @dataclass

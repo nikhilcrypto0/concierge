@@ -19,6 +19,18 @@ export interface ChatReply {
   request_id: string;
 }
 
+/** Live cost figures from the API's token ledger. Aggregates only. */
+export interface Stats {
+  window_hours: number;
+  conversations: number;
+  usd_total: number;
+  usd_per_conversation: number | null;
+  tokens_in_window: number;
+  daily_token_budget: number;
+  conversation_token_budget: number;
+  unpriced_models: string[];
+}
+
 export interface TranscriptMessage {
   role: "customer" | "assistant";
   content: string;
