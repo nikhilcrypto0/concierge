@@ -18,10 +18,16 @@ const fraunces = Fraunces({
   subsets: ["latin"],
 });
 
+const TITLE = "Concierge: a support agent that can't move money on its own";
+const DESCRIPTION =
+  "A production-style AI support agent. It answers from a help center with citations and applies the refund policy in code, and every refund waits for a person to approve it.";
+
 export const metadata: Metadata = {
-  title: "Concierge demo · Tidewell Home Services",
-  description:
-    "A production-style AI support agent: LangGraph and Claude answer customers, while refunds wait for a human approval.",
+  metadataBase: new URL("https://concierge-sand.vercel.app"),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: { title: TITLE, description: DESCRIPTION, type: "website", siteName: "Concierge" },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
