@@ -5,7 +5,7 @@ import { useCallback, useState } from "react";
 import { BookingsPanel } from "@/components/customer/bookings-panel";
 import { BreakItPanel } from "@/components/customer/break-it-panel";
 import { ChatWidget } from "@/components/customer/chat-widget";
-import { PitchBand } from "@/components/customer/pitch-band";
+import { PitchBand, type TourProgress } from "@/components/customer/pitch-band";
 import { SiteHeader } from "@/components/customer/site-header";
 import {
   ServicesSection,
@@ -46,6 +46,13 @@ export function CustomerSite() {
     setInput(`About booking ${booking.reference}: `);
   };
 
+  // The hero's walkthrough ticks off what this visitor has really done: asking for a refund and
+  // seeing it wait are one moment (2 steps), and a decision arriving completes the third.
+  const decided = chat.messages.some(
+    (message) => message.outcome === "refund_completed" || message.outcome === "refund_rejected",
+  );
+  const tourProgress: TourProgress = decided ? 3 : chat.awaitingApproval ? 2 : 0;
+
   // Room for the docked chat. Only the content makes room; the header spans the full width.
   const dock = `transition-[padding] duration-300 ${chatOpen ? "xl:pr-[420px]" : ""}`;
 
@@ -59,6 +66,7 @@ export function CustomerSite() {
             setChatOpen(true);
             setInput("Cancel BK-1042 and refund me");
           }}
+          progress={tourProgress}
         />
         <section className="mx-auto w-full max-w-7xl px-4 pt-10 pb-14 sm:px-6 lg:pt-12">
           <div className="grid items-start gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
