@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import psycopg
@@ -134,6 +135,58 @@ def test_refund_waits_for_a_human_and_is_applied_exactly_once(
     assert [m["role"] for m in transcript] == ["customer", "assistant", "assistant"]
     assert "sent a refund request" in transcript[1]["content"]
     assert "approved" in transcript[-1]["content"]
+
+
+def _open_refund_request(client: TestClient) -> str:
+    chat(client, "Please refund BK-1042")
+    return str(client.get("/v1/approvals", headers=OPERATOR).json()[0]["id"])
+
+
+def _race_decisions(client: TestClient, approval_id: str, approvals: list[bool]) -> list[int]:
+    """Send every decision at the same moment, as a double click or a retry storm would."""
+    url = f"/v1/approvals/{approval_id}/decision"
+    with ThreadPoolExecutor(max_workers=len(approvals)) as executor:
+        futures = [
+            executor.submit(client.post, url, json={"approve": approve}, headers=OPERATOR)
+            for approve in approvals
+        ]
+        return [future.result().status_code for future in futures]
+
+
+def test_a_double_clicked_approval_pays_exactly_once(client: TestClient, seeded: str) -> None:
+    approval_id = _open_refund_request(client)
+    statuses = _race_decisions(client, approval_id, [True] * 8)
+
+    assert sorted(statuses) == [200] + [409] * 7
+    with psycopg.connect(seeded) as conn:
+        booking = conn.execute(
+            "SELECT refunded_cents, status FROM bookings WHERE reference = 'BK-1042'"
+        ).fetchone()
+        actions = conn.execute(
+            "SELECT idempotency_key, amount_cents FROM actions"
+        ).fetchall()
+    assert booking == (24_000, "cancelled")
+    assert actions == [(f"refund:{approval_id}", 24_000)]
+
+
+def test_approve_and_reject_racing_settle_one_way(client: TestClient, seeded: str) -> None:
+    approval_id = _open_refund_request(client)
+    statuses = _race_decisions(client, approval_id, [True] * 4 + [False] * 4)
+
+    assert statuses.count(200) == 1 and statuses.count(409) == 7
+    with psycopg.connect(seeded) as conn:
+        status = conn.execute(
+            "SELECT status FROM approval_requests WHERE id = %s", (approval_id,)
+        ).fetchone()
+        refunded = conn.execute(
+            "SELECT refunded_cents FROM bookings WHERE reference = 'BK-1042'"
+        ).fetchone()
+        actions = conn.execute("SELECT count(*) FROM actions").fetchone()
+    # Whichever decision won, the money agrees with it: paid once if approved, never if rejected.
+    assert (status, refunded, actions) in {
+        (("approved",), (24_000,), (1,)),
+        (("rejected",), (0,), (0,)),
+    }
 
 
 def test_rejected_refund_leaves_the_booking_untouched(client: TestClient, seeded: str) -> None:
