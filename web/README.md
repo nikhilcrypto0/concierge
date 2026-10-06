@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Concierge demo UI
 
-## Getting Started
+A Next.js app with two screens: the Tidewell customer site with the chat assistant (`/`), and the support console where a person approves refunds (`/console`, behind a password). The project overview, design decisions, and results are in the [root README](../README.md).
 
-First, run the development server:
+The app never touches the database. It calls the Concierge API through its own `/api` routes, which attach the API keys on the server, so no key ever reaches the browser.
+
+## Run it
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # then fill in the values below
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| Setting | What it is |
+|---|---|
+| `CONCIERGE_API_URL` | Where the API runs, for example `http://127.0.0.1:8000` |
+| `CONCIERGE_CLIENT_KEY` | The key after `webapp:` in the API's `CLIENT_API_KEYS` |
+| `CONCIERGE_OPERATOR_KEY` | The key after `support-lead:` in the API's `OPERATOR_API_KEYS` |
+| `CONSOLE_PASSWORD` | Password for `/console`, 16 or more characters |
+| `CONSOLE_SESSION_SECRET` | Random secret that signs the login cookie, 32 or more characters |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+If either console setting is missing or too short, the console and every approval route stay locked.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Checks
 
-## Learn More
+```bash
+npm run lint
+npx next typegen && npx tsc --noEmit
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This version of Next.js has breaking changes from older releases. Read the guides in `node_modules/next/dist/docs/` before changing routing or server code (see `AGENTS.md`).

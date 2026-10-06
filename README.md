@@ -28,7 +28,7 @@ The demo company is *Tidewell Home Services*, a fictional home cleaning and repa
 
 ## Results at a glance
 
-Measured on 2026-09-13 with Claude Opus 5. Raw output is in [`evals/results/`](evals/results).
+Measured on 2026-09-13 with Claude Opus 5. Raw output is in [`evals/results/`](evals/results). Later changes (console login, untrusted retrieved text, lower approvals) are covered by unit and integration tests, but the agent eval has not been re-run since, so these numbers describe the 2026-09-13 build.
 
 | | |
 |---|---|
@@ -43,9 +43,9 @@ Measured on 2026-09-13 with Claude Opus 5. Raw output is in [`evals/results/`](e
 
 - **Answers questions from the help center** with citations, and says "I couldn't find that" instead of guessing.
 - **Looks up bookings** for the customer who owns them. Anyone else's booking is indistinguishable from a missing one.
-- **Handles refunds** by applying the written policy in code, then **pausing the workflow** until a person approves. The approved refund is applied exactly once, even under retries and concurrent clicks.
+- **Handles refunds** by applying the written policy in code, then **pausing the workflow** until a person approves in full, approves a lower amount, or rejects. The approved refund is applied exactly once, even under retries and concurrent clicks.
 - **Hands off to a human** for complaints, damage, low-confidence routing, model outages, and budget breaches, and records *why*.
-- **Blocks prompt injection** before any model call, and never tells the sender why.
+- **Blocks prompt injection** before any model call, treats retrieved help-center text as untrusted too, and never tells the sender why.
 - Exposes read-only tools over **MCP**, so Claude Code, Claude Desktop, or Cursor can search the help center and look up bookings.
 
 ## Architecture
@@ -175,11 +175,12 @@ uv run uvicorn --factory concierge.api.app:create_app      # http://127.0.0.1:80
 # 2. Demo UI, in a second terminal
 cd web
 npm install
-cp .env.example .env.local      # point it at the API and paste the same two keys
+cp .env.example .env.local      # point it at the API, paste the same two keys, and set
+                                # CONSOLE_PASSWORD (16+ chars) and CONSOLE_SESSION_SECRET (32+)
 npm run dev                     # http://localhost:3000
 ```
 
-Then open **http://localhost:3000**, ask the assistant to cancel BK-1042 and refund you, and approve it at **/console**. The API's own interactive docs stay at http://127.0.0.1:8000/docs.
+The console fails closed: without those two settings every approval route returns 401. Then open **http://localhost:3000**, ask the assistant to cancel BK-1042 and refund you, and approve it at **/console** after signing in with `CONSOLE_PASSWORD`. The API's own interactive docs stay at http://127.0.0.1:8000/docs.
 
 Demo bookings (times are relative to when you seed):
 
@@ -200,6 +201,27 @@ claude mcp add concierge -- uv --directory /path/to/concierge run concierge-mcp
 
 Tools: `search_help_center`, `get_booking`, `list_pending_refund_approvals`. The server is read-only by design: no tool can issue a refund.
 
+## How the live demo is deployed
+
+| Piece | Where | Notes |
+|---|---|---|
+| Web (`web/`) | Vercel, deploys `main` | Holds the API keys and the console password server-side |
+| API | Render free Docker service, from [`render.yaml`](render.yaml) | Auto-deploy is off; migrations run at startup |
+| Database | Neon Postgres with pgvector | Use the **direct** connection string, not the pooled one |
+
+Settings (names only; values live in each host's dashboard, never in the repo):
+
+- **API (Render):** `DATABASE_URL`, `ANTHROPIC_API_KEY`, `CLIENT_API_KEYS`, `OPERATOR_API_KEYS`, plus `ENVIRONMENT=prod`, `DEMO_MODE=true`, `RATE_LIMIT_PER_MINUTE`, `MAX_TOKENS_PER_DAY`, `MAX_TOKENS_PER_CONVERSATION`.
+- **Web (Vercel):** `CONCIERGE_API_URL`, `CONCIERGE_CLIENT_KEY`, `CONCIERGE_OPERATOR_KEY`, `CONSOLE_PASSWORD`, `CONSOLE_SESSION_SECRET`.
+
+Lessons from the first deploy, each of which cost real time:
+
+- **The Anthropic key must be created inside a workspace.** A personal-account key fails with "not scoped to a workspace", and the agent quietly hands every chat to a human (`classifier_unavailable`). The API now logs Anthropic's status and message so this is visible.
+- **Neon's free tier drops idle connections.** The connection pool verifies a connection before handing it out; before that fix, the first chat after a quiet spell returned a 500.
+- **Seeding is refused when `ENVIRONMENT=prod`.** Seed from a machine with `ENVIRONMENT=dev` pointed at the database.
+- **Deploy the API before the web app when the API contract changes**, because Vercel deploys on merge and the API is a manual deploy.
+- **The free API host sleeps after 15 idle minutes** and takes up to a minute to boot. The pages ping a keyless `/api/wake` on load and chat retries with a "waking up" notice, so a first visitor sees a short wait, not an error.
+
 ## Tests
 
 ```bash
@@ -212,7 +234,7 @@ cd web && npm run lint && npx tsc --noEmit && npm run build
 ```
 
 - **Unit tests** run every workflow path with the model, search index, and database replaced by fakes: approval pause and resume, mismatched approvals, budget breach, invalid model output, ungrounded citations, injection in customer messages and in retrieved articles (including a check that no shipped article is ever quarantined), ownership, rewrite drift, and per-turn state isolation.
-- **Integration tests** use real Postgres: concurrent refund execution, racing approval decisions, rollback on over-refund, the full HTTP refund flow and transcript, conversation hijacking, the conversation lock, rate limiting, body-size limits, hidden production docs, customer-scoped bookings, approval detail, and demo reset.
+- **Integration tests** use real Postgres: concurrent refund execution, racing approval decisions, rollback on over-refund, the full HTTP refund flow and transcript, state consistency for every decision path (approve, approve less, reject: booking, actions, approval row, and the customer's message agree) with the database itself refusing an over-policy amount, a connection pool that survives the server closing its connections, conversation hijacking, the conversation lock, rate limiting, body-size limits, hidden production docs, customer-scoped bookings, approval detail, and demo reset.
 - **CI** (GitHub Actions) runs lint, mypy, and unit tests; the web app's lint, types, and production build; integration tests against a pgvector service container; and the retrieval eval with thresholds. The agent eval runs on manual dispatch with an API key secret.
 
 ## Project layout
@@ -224,16 +246,18 @@ src/concierge/
   bookings/     policy.py (refund rules), repository.py (SQL, approvals, exactly-once refunds)
   retrieval/    chunking.py, embeddings.py, search.py (vector / keyword / fusion), ingest.py
   llm.py        Claude calls with structured output and fallback
-  guardrails.py input sanitization and injection detection
+  guardrails.py input sanitization, injection detection, retrieved-text hygiene
   budget.py     token ledger and budgets
   locks.py      per-conversation advisory lock
   mcp_server.py read-only MCP tools
 web/
   app/          customer site (/), support console (/console), server-side /api proxy routes
   components/   customer/ and console/ UI
-  hooks/        chat, bookings, approval queue, polling, storage
-  lib/          server-only API client, zod validation, personas, formatting
-migrations/     SQL schema
+  hooks/        chat, bookings, approval queue, polling, storage, API warm-up
+  lib/          server-only API client, operator session, zod validation, personas, formatting
+migrations/     SQL schema (001 base, 002 approved amount)
+Dockerfile      API image with the embedding model baked in
+render.yaml     Render blueprint for the API
 data/kb/        help-center articles
 evals/          datasets, runners, committed results
 tests/          unit/ and integration/
@@ -242,10 +266,10 @@ tests/          unit/ and integration/
 ## Known limitations and next steps
 
 - **The console login is one shared operator password** (a signed, HttpOnly cookie checked on the server), not per-person accounts or SSO, so every approval is recorded against the same operator identity. A team deployment needs individual accounts.
-- **Security headers are partial.** Frame, sniffing, referrer, and permissions policies ship; a strict script content policy needs per-request nonces, which belongs with the deployment work.
+- **Security headers are partial.** Frame, sniffing, referrer, and permissions policies ship; a strict script content policy needs per-request nonces and is still missing.
 - **Retrieval**: the one failing eval case points at the embedding model; compare a larger model and hybrid-on-rewrites with the existing evals before changing the default.
-- **Identity**: the client API key represents a trusted backend that asserts the customer's email. A public deployment should pass a signed customer token (JWT) instead.
-- **Rate limiting** is in-process; multiple replicas need Redis or Postgres-backed limits. Chunked uploads without a length header should be capped at the reverse proxy.
+- **Identity**: the client API key represents a trusted backend that asserts the customer's email. The demo is safe because its server maps two fixed personas to emails; a product with real customers should pass a signed customer token (JWT) instead.
+- **Rate limiting** is in-process; multiple replicas need Redis or Postgres-backed limits. Behind Render's proxy the failed-login throttle keys on the proxy's address and is weak; the per-key limit (one shared key for the whole website, so 20 requests a minute in total on the live demo) is the control that actually caps cost. Chunked uploads without a length header should be capped at the reverse proxy.
 - **Migrations run at startup**, which suits one instance; multi-replica deploys should run them as a release step.
 - **The Docker image has not been built in CI yet**; the Dockerfile and compose file cover the API only, not the web app.
 - **No streaming yet**: replies appear when the turn completes, with a typing indicator meanwhile.
