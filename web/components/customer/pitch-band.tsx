@@ -1,3 +1,4 @@
+import { LiveStats } from "@/components/customer/live-stats";
 import { Pill } from "@/components/ui/pill";
 import { PROOF, PROOF_HREF } from "@/lib/proof";
 
@@ -77,6 +78,7 @@ export function PitchBand({ onTry }: PitchBandProps) {
             How it was measured
           </a>
         </p>
+        <LiveStats />
 
         <ol className="mt-6 grid gap-3 border-t border-sand-50/15 pt-6 sm:grid-cols-3">
           {STEPS.map((step, index) => (

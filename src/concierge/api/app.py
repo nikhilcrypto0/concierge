@@ -30,11 +30,12 @@ from concierge.api.schemas import (
     DecisionRequest,
     DecisionResponse,
     Source,
+    StatsOut,
     TranscriptMessage,
 )
 from concierge.api.security import Principal, SlidingWindowRateLimiter, require_role
 from concierge.bookings.repository import SupportRepository
-from concierge.budget import PostgresUsageLedger
+from concierge.budget import PostgresUsageLedger, usage_summary
 from concierge.config import Settings, get_settings
 from concierge.db import create_pool, run_migrations
 from concierge.llm import AnthropicSupportLLM, SupportLLM
@@ -289,6 +290,23 @@ def create_app(
         await refresh_demo_if_stale(request)
         bookings = await repository.list_bookings_for_customer(customer_email.strip())
         return [BookingOut.from_domain(b) for b in bookings]
+
+    @app.get("/v1/stats", response_model=StatsOut, tags=["customer"])
+    async def stats(request: Request, _: ClientPrincipal) -> StatsOut:
+        summary = await usage_summary(request.app.state.pool, hours=24)
+        return StatsOut(
+            window_hours=summary.hours,
+            conversations=summary.conversations,
+            usd_total=round(summary.usd, 6),
+            usd_per_conversation=(
+                round(summary.usd_per_conversation, 6)
+                if summary.usd_per_conversation is not None else None
+            ),
+            tokens_in_window=summary.tokens,
+            daily_token_budget=settings.max_tokens_per_day,
+            conversation_token_budget=settings.max_tokens_per_conversation,
+            unpriced_models=list(summary.unpriced_models),
+        )
 
     @app.get("/v1/approvals", response_model=list[ApprovalOut], tags=["operator"])
     async def list_approvals(

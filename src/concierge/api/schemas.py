@@ -55,6 +55,23 @@ class ChatResponse(BaseModel):
     request_id: str
 
 
+class StatsOut(BaseModel):
+    """Live cost figures from the token ledger: aggregates only, no customer or chat data."""
+
+    window_hours: int
+    conversations: int = Field(description="Conversations that reached a model in the window")
+    usd_total: float
+    usd_per_conversation: float | None = Field(
+        description="Null until at least one conversation has reached a model"
+    )
+    tokens_in_window: int
+    daily_token_budget: int
+    conversation_token_budget: int
+    unpriced_models: list[str] = Field(
+        description="Models with no price on file; their cost is counted at the highest tier"
+    )
+
+
 class BookingOut(BaseModel):
     reference: str
     service: str
