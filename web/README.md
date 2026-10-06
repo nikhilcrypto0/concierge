@@ -2,6 +2,8 @@
 
 A Next.js app with two screens: the Tidewell customer site with the chat assistant (`/`), and the support console where a person approves refunds (`/console`, behind a password). The project overview, design decisions, and results are in the [root README](../README.md).
 
+Anyone can take a view-only tour of the console at `/console/sample`. It shows made-up requests, makes no API calls and has no buttons, so it needs no password and exposes nothing.
+
 The app never touches the database. It calls the Concierge API through its own `/api` routes, which attach the API keys on the server, so no key ever reaches the browser.
 
 ## Run it

@@ -33,6 +33,7 @@ Rules:
 - `POST /v1/demo/reset` exists only when `DEMO_MODE=true`. It keeps `llm_usage`, so resetting cannot clear the daily token budget.
 - Every figure in the console is derived from approval rows the page already fetched (`web/lib/console-metrics.ts`). No number on screen is invented, and none of them need a stats endpoint. Keep it that way: a dashboard that shows a number nobody can trace is worse than one that shows nothing.
 - Elapsed times come from the `useNow` store, never `Date.now()` during render, which React's purity rule rejects.
+- `/console/sample` is the public view-only tour. It must stay fixture-only (`web/lib/sample-console.ts`): no `fetch`, no `forward`, no operator key, no live approvals. Showing live approvals publicly would show other visitors' chats. It reuses `ConsoleView` with `sample` set, which hides the decision form and the reset button.
 - The console needs the operator password (`web/lib/operator-session.ts`: signed HttpOnly cookie). Every route that forwards as `operator` must call `requireOperator()` first, or a visitor can approve refunds.
 
 ## Rules that keep it safe

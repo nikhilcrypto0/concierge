@@ -23,7 +23,7 @@ export function DemoBar() {
 
         <nav aria-label="Demo views" className="flex items-center gap-1">
           {TABS.map((tab) => {
-            const active = pathname === tab.href;
+            const active = tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
             return (
               <Link
                 key={tab.href}

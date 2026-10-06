@@ -13,6 +13,8 @@ interface ApprovalDetailProps {
   deciding: boolean;
   lastDecision: DecisionResult | null;
   onDecide: (approve: boolean, note: string, approvedAmountCents?: number) => Promise<void>;
+  /** Sample tour: show the request but offer no way to decide it. */
+  readOnly?: boolean;
 }
 
 
@@ -96,6 +98,7 @@ export function ApprovalDetailPanel({
   deciding,
   lastDecision,
   onDecide,
+  readOnly = false,
 }: ApprovalDetailProps) {
   const [note, setNote] = useState("");
   const [amountText, setAmountText] = useState("");
@@ -154,13 +157,21 @@ export function ApprovalDetailPanel({
         <header className="flex items-center justify-between gap-3">
           <h2 className="font-display text-lg text-ink-900">Refund request</h2>
           <Pill tone={pending ? "amber" : approval.status === "approved" ? "moss" : "rose"}>
-            {pending ? "Waiting for you" : approval.status}
+            {pending ? (readOnly ? "Waiting for a person" : "Waiting for you") : approval.status}
           </Pill>
         </header>
 
         <Facts detail={detail} />
 
-        {pending ? (
+        {pending && readOnly ? (
+          <div className="mt-auto rounded-xl bg-sand-100 p-3 text-sm text-ink-700">
+            <p className="font-medium text-ink-900">View-only sample</p>
+            <p className="mt-1">
+              A real request waits here until a person approves, approves less, or rejects it. This
+              sample has no buttons, so nothing can be decided.
+            </p>
+          </div>
+        ) : pending ? (
           <div className="mt-auto space-y-3">
             <label className="block text-sm">
               <span className="text-ink-500">Note for the record</span>
