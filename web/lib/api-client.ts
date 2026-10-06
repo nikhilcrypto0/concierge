@@ -75,5 +75,13 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  /** Demo only: play the support lead for your own pending request. */
+  demoDecide: (body: {
+    persona: PersonaId;
+    conversationId: string;
+    approve: boolean;
+    approvedAmountCents?: number;
+  }) => request<DecisionResult>("/api/demo/decide", { method: "POST", body: JSON.stringify(body) }),
+
   resetDemo: () => request<{ status: string }>("/api/demo/reset", { method: "POST" }),
 };

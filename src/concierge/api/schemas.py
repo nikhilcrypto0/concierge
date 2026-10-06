@@ -70,6 +70,9 @@ class StatsOut(BaseModel):
     unpriced_models: list[str] = Field(
         description="Models with no price on file; their cost is counted at the highest tier"
     )
+    demo_mode: bool = Field(
+        description="True when this API is a public demo (visitors may play the support lead)"
+    )
 
 
 class BookingOut(BaseModel):
@@ -142,6 +145,23 @@ class DecisionRequest(BaseModel):
         gt=0,
         description="Approve LESS than the policy amount. Omit to approve the full amount.",
     )
+
+    @model_validator(mode="after")
+    def _amount_only_with_approval(self) -> Self:
+        if self.approved_amount_cents is not None and not self.approve:
+            raise ValueError("an amount can only accompany an approval")
+        return self
+
+
+class DemoDecisionRequest(BaseModel):
+    """A demo visitor deciding THEIR OWN pending request. Demo mode only (see /v1/demo/decide)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    conversation_id: UUID
+    customer_email: Email = Field(description="Must own the conversation, as for chat")
+    approve: bool
+    approved_amount_cents: int | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def _amount_only_with_approval(self) -> Self:

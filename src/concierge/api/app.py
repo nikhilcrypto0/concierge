@@ -29,6 +29,7 @@ from concierge.api.schemas import (
     ChatResponse,
     DecisionRequest,
     DecisionResponse,
+    DemoDecisionRequest,
     Source,
     StatsOut,
     TranscriptMessage,
@@ -75,6 +76,9 @@ BUSY = ConversationBusyError
 DEMO_MAX_AGE = timedelta(hours=3)
 DEMO_QUIET_FOR = timedelta(minutes=10)
 DEMO_PENDING_GRACE = timedelta(minutes=30)
+# Recorded as the reviewer when a visitor plays the support lead, so the audit trail never
+# mistakes it for a real operator.
+DEMO_REVIEWER = "demo-visitor"
 DEMO_CHECK_EVERY_SECONDS = 60.0
 
 
@@ -306,6 +310,7 @@ def create_app(
             daily_token_budget=settings.max_tokens_per_day,
             conversation_token_budget=settings.max_tokens_per_conversation,
             unpriced_models=list(summary.unpriced_models),
+            demo_mode=settings.demo_mode,
         )
 
     @app.get("/v1/approvals", response_model=list[ApprovalOut], tags=["operator"])
@@ -335,11 +340,10 @@ def create_app(
             transcript=await _transcript(request.app.state.graph, approval.conversation_id),
         )
 
-    @app.post("/v1/approvals/{approval_id}/decision", response_model=DecisionResponse,
-              tags=["operator"])
-    async def decide(
-        approval_id: UUID, body: DecisionRequest, request: Request, principal: OperatorPrincipal
+    async def apply_decision(
+        request: Request, approval_id: UUID, body: DecisionRequest, reviewer: str
     ) -> DecisionResponse:
+        """Record a decision and resume the paused conversation. The only path that moves money."""
         state = request.app.state
         repository: SupportRepository = state.repository
         existing = await repository.get_approval(approval_id)
@@ -360,7 +364,7 @@ def create_app(
             if not acquired:
                 raise BUSY
             decided = await repository.decide_approval(approval_id, body.approve,
-                                                       principal.name, body.note, adjusted)
+                                                       reviewer, body.note, adjusted)
             if decided is None:
                 current = await repository.get_approval(approval_id) or existing
                 paused = await state.graph.aget_state(_thread(conversation_id))
@@ -370,7 +374,8 @@ def create_app(
                 # Decided earlier but the run never resumed (e.g. a crash): finish it now.
                 # Safe, because executing the refund is idempotent.
                 decided = current
-            log.info("approval.decided", approval_id=str(decided.id), status=decided.status)
+            log.info("approval.decided", approval_id=str(decided.id), status=decided.status,
+                     reviewer=reviewer)
             with trace_session(settings, conversation_id):
                 result = await resume_after_decision(state.graph, conversation_id, decided.id,
                                                      tracing_callbacks(settings))
@@ -380,6 +385,39 @@ def create_app(
             outcome=result.outcome,
             customer_reply=result.reply,
         )
+
+    @app.post("/v1/approvals/{approval_id}/decision", response_model=DecisionResponse,
+              tags=["operator"])
+    async def decide(
+        approval_id: UUID, body: DecisionRequest, request: Request, principal: OperatorPrincipal
+    ) -> DecisionResponse:
+        return await apply_decision(request, approval_id, body, principal.name)
+
+    @app.post("/v1/demo/decide", response_model=DecisionResponse, tags=["customer"])
+    async def demo_decide(
+        body: DemoDecisionRequest, request: Request, _: ClientPrincipal
+    ) -> DecisionResponse:
+        """Demo mode only: let a visitor play the support lead for THEIR OWN pending request.
+
+        The real product has no such route. It exists so a public visitor can complete the loop
+        without the operator password, and it can only decide the one open request on a
+        conversation that belongs to the customer who is asking, on demo data.
+        """
+        if not settings.demo_mode:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+        repository: SupportRepository = request.app.state.repository
+        approval = await repository.pending_approval_for_customer(
+            body.conversation_id, body.customer_email
+        )
+        if approval is None:
+            # Someone else's conversation, or nothing waiting: indistinguishable on purpose.
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "no pending request")
+        decision = DecisionRequest(
+            approve=body.approve,
+            note="Decided by a demo visitor",
+            approved_amount_cents=body.approved_amount_cents,
+        )
+        return await apply_decision(request, approval.id, decision, DEMO_REVIEWER)
 
     @app.post("/v1/demo/reset", tags=["operator"])
     async def reset_demo(request: Request, principal: OperatorPrincipal) -> dict[str, str]:

@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Pill } from "@/components/ui/pill";
 import { formatDateTime, policyCopy, timeAgo } from "@/lib/format";
+import { parseDollarsToCents } from "@/lib/money";
 import type { ApprovalDetail as Detail, DecisionResult } from "@/lib/types";
 
 interface ApprovalDetailProps {
@@ -14,15 +15,6 @@ interface ApprovalDetailProps {
   onDecide: (approve: boolean, note: string, approvedAmountCents?: number) => Promise<void>;
 }
 
-const DOLLARS = /^\d+(\.\d{1,2})?$/;
-
-/** Whole cents from a typed dollar amount, or null when it is not a plain positive amount. */
-function parseDollarsToCents(text: string): number | null {
-  const trimmed = text.trim();
-  if (!DOLLARS.test(trimmed)) return null;
-  const cents = Math.round(Number(trimmed) * 100);
-  return cents > 0 ? cents : null;
-}
 
 function Transcript({ detail }: { detail: Detail }) {
   return (
