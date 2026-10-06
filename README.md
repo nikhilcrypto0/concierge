@@ -8,6 +8,8 @@
 
 **A customer support agent that cannot move money on its own.** It answers questions from a help center and handles refund requests, but no refund is paid until a person approves it. The refund amount comes from the written policy in code, never from the model, and every approval is recorded with the reviewer, the time, and the policy reason for the amount.
 
+**Live demo: [concierge-sand.vercel.app](https://concierge-sand.vercel.app).** Pick a customer, ask it to cancel BK-1042 and refund you, and watch the request wait for a person. The demo runs on free hosting, so the first message after a quiet spell can take up to a minute while the API wakes up. The support console is password protected, because it is where refunds are approved; the screenshots below show it.
+
 Under the hood: a **LangGraph** workflow over **Claude**, retrieval on **Postgres + pgvector**, and **evals that gate CI**.
 
 The demo company is *Tidewell Home Services*, a fictional home cleaning and repair business with a help center, bookings, and a refund policy. Two screens make the safety model visible: the customer site with the assistant, and the support console where a person approves refunds.

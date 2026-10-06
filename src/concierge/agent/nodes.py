@@ -97,6 +97,17 @@ def _format_when(iso: str) -> str:
     return f"{when:%A, %B} {when.day} at {when:%H:%M} UTC"
 
 
+def _api_error_detail(exc: Exception) -> dict[str, Any]:
+    """Status and message of an Anthropic API error, so a bad key or empty balance is visible.
+
+    Only API errors qualify: their text comes from Anthropic, never from a customer, and it
+    never contains the key. Model-output errors are left out because they can echo user text.
+    """
+    if isinstance(exc, anthropic.APIStatusError):
+        return {"status_code": exc.status_code, "detail": str(exc.message)[:300]}
+    return {}
+
+
 def _handoff(reason: HandoffReason, reply: str = REPLY_HANDOFF) -> dict[str, Any]:
     log.info("handoff.requested", reason=reason)
     return {"outcome": "handoff", "handoff_reason": reason, "reply": reply}
@@ -133,7 +144,7 @@ class SupportAgentNodes:
             log.error("budget.breach", scope=exc.scope, used=exc.used, limit=exc.limit)
             return _handoff("budget")
         except (LLMOutputError, anthropic.APIError) as exc:
-            log.error("classify.failed", error=type(exc).__name__)
+            log.error("classify.failed", error=type(exc).__name__, **_api_error_detail(exc))
             return _handoff("classifier_unavailable")
 
         decision = result.value
@@ -202,7 +213,7 @@ class SupportAgentNodes:
             log.error("budget.breach", scope=exc.scope, used=exc.used, limit=exc.limit)
             return _handoff("budget")
         except (LLMOutputError, anthropic.APIError) as exc:
-            log.error("answer.failed", error=type(exc).__name__)
+            log.error("answer.failed", error=type(exc).__name__, **_api_error_detail(exc))
             return _handoff("answerer_unavailable")
 
         grounded = result.value

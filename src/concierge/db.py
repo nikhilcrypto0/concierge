@@ -25,6 +25,10 @@ def create_pool(database_url: str, min_size: int = 1, max_size: int = 10) -> Dic
         min_size=min_size,
         max_size=max_size,
         open=False,
+        # Serverless Postgres (Neon free) suspends idle computes and drops their connections.
+        # Verify a connection on checkout and replace dead ones, or the first request after a
+        # quiet spell fails with "SSL connection has been closed unexpectedly".
+        check=AsyncConnectionPool.check_connection,
         kwargs={"autocommit": True, "row_factory": dict_row, "prepare_threshold": 0},
     )
 
