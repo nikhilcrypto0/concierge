@@ -57,6 +57,12 @@ log = structlog.get_logger(__name__)
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 MAX_BODY_BYTES = 64 * 1024
 ClientPrincipal = Annotated[Principal, Depends(require_role("client"))]
+# Cheap reads (bookings, transcripts, stats) spend a larger, separate budget, so a page load or
+# the chat's polling can never use up the budget that protects the calls that cost money.
+READ_RATE_MULTIPLIER = 6
+ClientReadPrincipal = Annotated[
+    Principal, Depends(require_role("client", "read_rate_limiter"))
+]
 OperatorPrincipal = Annotated[Principal, Depends(require_role("operator"))]
 CustomerEmail = Annotated[str, Query(max_length=254)]
 
@@ -144,6 +150,9 @@ def create_app(
             app.state.repository = repository
             app.state.graph = build_graph(deps, checkpointer)
             app.state.rate_limiter = SlidingWindowRateLimiter(settings.rate_limit_per_minute)
+            app.state.read_rate_limiter = SlidingWindowRateLimiter(
+                settings.rate_limit_per_minute * READ_RATE_MULTIPLIER
+            )
             app.state.demo_checked_at = float("-inf")
             log.info("app.started", environment=settings.environment,
                      model=settings.primary_model, tracing=settings.tracing_enabled,
@@ -279,7 +288,7 @@ def create_app(
         conversation_id: UUID,
         customer_email: CustomerEmail,
         request: Request,
-        _: ClientPrincipal,
+        _: ClientReadPrincipal,
     ) -> list[TranscriptMessage]:
         owner = await request.app.state.repository.conversation_owner(conversation_id)
         if owner is None or owner.lower() != customer_email.strip().lower():
@@ -288,7 +297,7 @@ def create_app(
 
     @app.get("/v1/bookings", response_model=list[BookingOut], tags=["customer"])
     async def my_bookings(
-        customer_email: CustomerEmail, request: Request, _: ClientPrincipal
+        customer_email: CustomerEmail, request: Request, _: ClientReadPrincipal
     ) -> list[BookingOut]:
         repository: SupportRepository = request.app.state.repository
         await refresh_demo_if_stale(request)
@@ -296,7 +305,7 @@ def create_app(
         return [BookingOut.from_domain(b) for b in bookings]
 
     @app.get("/v1/stats", response_model=StatsOut, tags=["customer"])
-    async def stats(request: Request, _: ClientPrincipal) -> StatsOut:
+    async def stats(request: Request, _: ClientReadPrincipal) -> StatsOut:
         summary = await usage_summary(request.app.state.pool, hours=24)
         return StatsOut(
             window_hours=summary.hours,

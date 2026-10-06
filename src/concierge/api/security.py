@@ -75,15 +75,23 @@ class SlidingWindowRateLimiter:
             return True, 0.0
 
 
-def require_role(role: Role) -> Callable[..., Awaitable[Principal]]:
+def require_role(
+    role: Role, limiter_name: str = "rate_limiter"
+) -> Callable[..., Awaitable[Principal]]:
+    """`limiter_name` picks which request budget an authenticated call spends. Cheap reads can
+    use a larger one so page loads and polling never starve the calls that cost money. Failed
+    attempts always spend the strict budget, so key guessing stays limited."""
+
     async def dependency(
         request: Request, api_key: Annotated[str | None, Security(API_KEY_HEADER)]
     ) -> Principal:
         settings = request.app.state.settings
         keys = settings.client_api_keys if role == "client" else settings.operator_api_keys
-        limiter: SlidingWindowRateLimiter = request.app.state.rate_limiter
+        strict: SlidingWindowRateLimiter = request.app.state.rate_limiter
+        limiter: SlidingWindowRateLimiter = getattr(request.app.state, limiter_name)
         principal = authenticate(api_key, keys, role)
         if principal is None:
+            limiter = strict
             # Failed attempts are throttled per client address, so key guessing is limited too.
             client = request.client.host if request.client else "unknown"
             allowed, retry_after = await limiter.allow(f"unauthenticated:{client}")
