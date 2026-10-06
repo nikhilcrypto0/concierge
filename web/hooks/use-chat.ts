@@ -58,8 +58,11 @@ export interface ChatController {
   error: string | null;
   /** A non-error status line, for example while the API host wakes up. */
   notice: string | null;
+  conversationId: string | null;
   send: (text: string) => Promise<void>;
   startNewConversation: () => void;
+  /** Looks for the outcome message right away instead of waiting for the next poll. */
+  checkForOutcome: () => Promise<void>;
 }
 
 export function useChat({ persona, onBookingsMayHaveChanged }: UseChatOptions): ChatController {
@@ -198,31 +201,31 @@ export function useChat({ persona, onBookingsMayHaveChanged }: UseChatOptions): 
     [conversationId, forget, onBookingsMayHaveChanged, persona.id, sending, setConversationId],
   );
 
-  // While a refund waits on a human, watch the transcript for the outcome message.
-  usePolling(
-    async () => {
-      const pausedAt = pausedAtRef.current;
-      if (!conversationId || pausedAt === null) return;
-      const transcript = await api.transcript(persona.id, conversationId);
-      if (transcript.length <= pausedAt) return;
+  // Looks for the outcome message once a human has decided. Polled while a refund waits, and
+  // called straight away when the visitor decides it themselves in the demo.
+  const checkForOutcome = useCallback(async () => {
+    const pausedAt = pausedAtRef.current;
+    if (!conversationId || pausedAt === null) return;
+    const transcript = await api.transcript(persona.id, conversationId);
+    if (transcript.length <= pausedAt) return;
 
-      const fresh = transcript.slice(pausedAt).filter((m) => m.role === "assistant");
-      pausedAtRef.current = null;
-      setAwaitingApproval(false);
-      setMessages((previous) => [
-        ...previous,
-        ...fresh.map((message) => ({
-          id: newId(),
-          role: "assistant" as const,
-          content: message.content,
-          outcome: outcomeFromReply(message.content),
-        })),
-      ]);
-      onBookingsMayHaveChanged?.();
-    },
-    5_000,
-    awaitingApproval,
-  );
+    const fresh = transcript.slice(pausedAt).filter((m) => m.role === "assistant");
+    pausedAtRef.current = null;
+    setAwaitingApproval(false);
+    setMessages((previous) => [
+      ...previous,
+      ...fresh.map((message) => ({
+        id: newId(),
+        role: "assistant" as const,
+        content: message.content,
+        outcome: outcomeFromReply(message.content),
+      })),
+    ]);
+    onBookingsMayHaveChanged?.();
+  }, [conversationId, onBookingsMayHaveChanged, persona.id]);
+
+  // While a refund waits on a human, watch the transcript for the outcome message.
+  usePolling(checkForOutcome, 5_000, awaitingApproval);
 
   const startNewConversation = useCallback(() => {
     forget();
@@ -230,5 +233,15 @@ export function useChat({ persona, onBookingsMayHaveChanged }: UseChatOptions): 
     setConversationId(null);
   }, [forget, setConversationId]);
 
-  return { messages, sending, awaitingApproval, error, notice, send, startNewConversation };
+  return {
+    messages,
+    sending,
+    awaitingApproval,
+    error,
+    notice,
+    conversationId,
+    send,
+    startNewConversation,
+    checkForOutcome,
+  };
 }

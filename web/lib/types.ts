@@ -29,6 +29,8 @@ export interface Stats {
   daily_token_budget: number;
   conversation_token_budget: number;
   unpriced_models: string[];
+  /** True when the API is a public demo, where visitors may play the support lead. */
+  demo_mode: boolean;
 }
 
 export interface TranscriptMessage {

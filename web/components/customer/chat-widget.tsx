@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useEffect, useRef } from "react";
 
 import type { ChatController, ChatItem } from "@/hooks/use-chat";
+import { PlaySupportLead } from "@/components/customer/play-support-lead";
+import { useStats } from "@/hooks/use-stats";
 import { Pill } from "@/components/ui/pill";
 import { HANDOFF_COPY } from "@/lib/format";
 import type { Persona } from "@/lib/personas";
@@ -132,6 +134,7 @@ export function ChatWidget({
   onInputChange,
 }: ChatWidgetProps) {
   const endRef = useRef<HTMLDivElement>(null);
+  const stats = useStats();
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
@@ -228,6 +231,13 @@ export function ChatWidget({
           )}
         </ul>
 
+        {chat.awaitingApproval && chat.conversationId && stats?.demo_mode === true && (
+          <PlaySupportLead
+            persona={persona}
+            conversationId={chat.conversationId}
+            onDecided={chat.checkForOutcome}
+          />
+        )}
         {chat.notice && (
           <p role="status" className="mt-3 rounded-xl bg-sand-100 px-3 py-2 text-xs text-ink-700">
             {chat.notice}

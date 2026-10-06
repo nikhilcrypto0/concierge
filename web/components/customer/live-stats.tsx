@@ -1,9 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-import { api } from "@/lib/api-client";
-import type { Stats } from "@/lib/types";
+import { useStats } from "@/hooks/use-stats";
 
 const USD = (value: number) => `$${value.toFixed(4)}`;
 const COUNT = (value: number) => value.toLocaleString("en-US");
@@ -14,23 +11,7 @@ const COUNT = (value: number) => value.toLocaleString("en-US");
  * If the API cannot be reached the line simply does not appear.
  */
 export function LiveStats() {
-  const [stats, setStats] = useState<Stats | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .stats()
-      .then((value) => {
-        if (!cancelled) setStats(value);
-      })
-      .catch(() => {
-        // Optional extra: nothing to show if the API is asleep or unreachable.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+  const stats = useStats();
   if (!stats) return null;
 
   const guard = `${COUNT(stats.tokens_in_window)} of ${COUNT(stats.daily_token_budget)} tokens used against the daily spending limit.`;

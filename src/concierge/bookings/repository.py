@@ -153,6 +153,23 @@ class SupportRepository:
             row = await cur.fetchone()
         return _approval(row) if row else None
 
+    async def pending_approval_for_customer(
+        self, conversation_id: UUID, customer_email: str
+    ) -> ApprovalRequest | None:
+        """The open request on this conversation, only if the conversation is this customer's."""
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                """
+                SELECT a.*, c.customer_email
+                FROM approval_requests a JOIN conversations c ON c.id = a.conversation_id
+                WHERE a.conversation_id = %s AND lower(c.customer_email) = lower(%s)
+                  AND a.status = 'pending'
+                """,
+                (conversation_id, customer_email),
+            )
+            row = await cur.fetchone()
+        return _approval(row) if row else None
+
     async def list_approvals(
         self, status: ApprovalStatus, limit: int = 50
     ) -> list[ApprovalRequest]:

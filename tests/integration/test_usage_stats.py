@@ -83,4 +83,6 @@ def test_stats_need_the_client_key_and_expose_no_customer_data(
     assert set(body) == {
         "window_hours", "conversations", "usd_total", "usd_per_conversation",
         "tokens_in_window", "daily_token_budget", "conversation_token_budget", "unpriced_models",
+        "demo_mode",
     }
+    assert body["demo_mode"] is False  # the test app is not a demo
