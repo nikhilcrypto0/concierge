@@ -8,6 +8,7 @@ import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
@@ -66,6 +67,13 @@ class ConversationBusyError(HTTPException):
 
 
 BUSY = ConversationBusyError
+
+# Demo mode keeps its seeded bookings fresh. Refund tiers flip at 24 and 48 hours of notice and
+# the seed puts bookings 6 and 30 hours out, so data older than about 3 hours is reseeded (only
+# when idle) well before a tier drifts.
+DEMO_MAX_AGE = timedelta(hours=3)
+DEMO_QUIET_FOR = timedelta(minutes=10)
+DEMO_CHECK_EVERY_SECONDS = 60.0
 
 
 def _thread(conversation_id: UUID) -> RunnableConfig:
@@ -130,6 +138,7 @@ def create_app(
             app.state.repository = repository
             app.state.graph = build_graph(deps, checkpointer)
             app.state.rate_limiter = SlidingWindowRateLimiter(settings.rate_limit_per_minute)
+            app.state.demo_checked_at = float("-inf")
             log.info("app.started", environment=settings.environment,
                      model=settings.primary_model, tracing=settings.tracing_enabled,
                      demo_mode=settings.demo_mode)
@@ -203,10 +212,30 @@ def create_app(
             return JSONResponse({"status": "unavailable"}, status.HTTP_503_SERVICE_UNAVAILABLE)
         return JSONResponse({"status": "ready"})
 
+    async def refresh_demo_if_stale(request: Request) -> None:
+        """Demo mode only: reseed bookings whose "N hours away" times have drifted.
+
+        Throttled to one cheap check a minute. The repository only calls the data stale when no
+        refund is waiting and nobody has chatted lately, so a visitor is never reset mid-demo.
+        """
+        if not settings.demo_mode:
+            return
+        state = request.app.state
+        now = time.monotonic()
+        if now - state.demo_checked_at < DEMO_CHECK_EVERY_SECONDS:
+            return
+        state.demo_checked_at = now
+        repository: SupportRepository = state.repository
+        if await repository.demo_data_is_stale(DEMO_MAX_AGE, DEMO_QUIET_FOR):
+            seed_sql = await asyncio.to_thread(DEMO_SEED.read_text)
+            await repository.reset_demo_data(seed_sql)
+            log.warning("demo.refreshed", reason="stale")
+
     @app.post("/v1/chat", response_model=ChatResponse, tags=["customer"])
     async def chat(body: ChatRequest, request: Request, _: ClientPrincipal) -> ChatResponse:
         state = request.app.state
         repository: SupportRepository = state.repository
+        await refresh_demo_if_stale(request)
         conversation_id = body.conversation_id or uuid4()
         if not await repository.claim_conversation(conversation_id, body.customer_email):
             # Someone else's conversation looks exactly like a missing one.
@@ -256,6 +285,7 @@ def create_app(
         customer_email: CustomerEmail, request: Request, _: ClientPrincipal
     ) -> list[BookingOut]:
         repository: SupportRepository = request.app.state.repository
+        await refresh_demo_if_stale(request)
         bookings = await repository.list_bookings_for_customer(customer_email.strip())
         return [BookingOut.from_domain(b) for b in bookings]
 

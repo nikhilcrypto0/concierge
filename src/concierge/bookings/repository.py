@@ -5,7 +5,7 @@ retried request, a double-clicked approval, or a replayed graph step cannot refu
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -13,6 +13,11 @@ from concierge.bookings.models import Booking
 from concierge.db import DictPool
 
 ApprovalStatus = Literal["pending", "approved", "rejected"]
+
+# data/seed_bookings.sql seeds this booking 30 hours ahead, so its time to go tells us how long
+# ago the demo data was seeded. tests/unit/test_demo_freshness.py keeps the two in sync.
+DEMO_CLOCK_BOOKING = "BK-1043"
+DEMO_CLOCK_LEAD = timedelta(hours=30)
 
 
 @dataclass(frozen=True)
@@ -227,6 +232,30 @@ class SupportRepository:
             if await cur.fetchone() is None:
                 raise RefundConflictError(approval["booking_reference"])
         return True
+
+    async def demo_data_is_stale(self, max_age: timedelta, quiet_for: timedelta) -> bool:
+        """True when the demo bookings are old enough that their refund tiers have drifted.
+
+        Seeded times are relative to the moment of seeding (a booking "6 hours away" stops being
+        late-notice once that time passes). Reseeding wipes conversations, so it only counts as
+        due when nobody is mid-demo: no refund waiting for a person and no chat for `quiet_for`.
+        """
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                """
+                SELECT
+                    (SELECT now() - (scheduled_for - %(lead)s) FROM bookings
+                     WHERE reference = %(ref)s) AS age,
+                    (SELECT count(*) FROM approval_requests WHERE status = 'pending') AS pending,
+                    (SELECT now() - max(created_at) FROM llm_usage) AS idle
+                """,
+                {"ref": DEMO_CLOCK_BOOKING, "lead": DEMO_CLOCK_LEAD},
+            )
+            row = await cur.fetchone()
+        if row is None or row["age"] is None:
+            return False  # nothing seeded here, so there is nothing to refresh
+        recently_active = row["idle"] is not None and row["idle"] < quiet_for
+        return row["age"] >= max_age and row["pending"] == 0 and not recently_active
 
     async def reset_demo_data(self, seed_sql: str) -> None:
         """Restore demo bookings and forget every conversation, approval, and checkpoint.
