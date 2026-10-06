@@ -28,7 +28,7 @@ The demo company is *Tidewell Home Services*, a fictional home cleaning and repa
 
 ## Results at a glance
 
-Measured on 2026-09-13 with Claude Opus 5. Raw output is in [`evals/results/`](evals/results). Later changes (console login, untrusted retrieved text, lower approvals) are covered by unit and integration tests, but the agent eval has not been re-run since, so these numbers describe the 2026-09-13 build.
+Measured on 2026-10-06 with Claude Opus 5, on the current build. I ran the eval three times: every run scored 30 of 31, 7 of 7 safety, 0 refunds without a human, about $0.0085 per conversation. The one miss (`q05`, paying the cleaner in cash) fails the same way each time: the agent says it cannot find the answer and offers a person. Raw output, including the three runs, is in [`evals/results/`](evals/results). It is still a small set, so the intervals are wide (30/31 supports roughly 84% to 99%); the stronger guarantee is structural.
 
 | | |
 |---|---|
