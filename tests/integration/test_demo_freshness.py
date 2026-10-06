@@ -8,7 +8,7 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-from concierge.api.app import DEMO_MAX_AGE, DEMO_QUIET_FOR, create_app
+from concierge.api.app import DEMO_MAX_AGE, DEMO_PENDING_GRACE, DEMO_QUIET_FOR, create_app
 from concierge.bookings.repository import SupportRepository
 from concierge.db import DictPool
 from concierge.retrieval.embeddings import FastEmbedEmbedder
@@ -29,7 +29,9 @@ def _age_the_demo(database_url: str, by: timedelta) -> None:
 
 
 async def _stale(pool: DictPool) -> bool:
-    return await SupportRepository(pool).demo_data_is_stale(DEMO_MAX_AGE, DEMO_QUIET_FOR)
+    return await SupportRepository(pool).demo_data_is_stale(
+        DEMO_MAX_AGE, DEMO_QUIET_FOR, DEMO_PENDING_GRACE
+    )
 
 
 async def test_freshly_seeded_data_is_not_stale(pool: DictPool) -> None:
@@ -55,6 +57,23 @@ async def test_a_refund_waiting_for_a_person_blocks_the_refresh(
     await repo.open_approval_request(conversation_id, "BK-1042", 24_000, "full_notice")
     _age_the_demo(seeded, DEMO_MAX_AGE + timedelta(hours=1))
     assert not await _stale(pool)
+
+
+async def test_an_abandoned_pending_refund_does_not_freeze_the_demo(
+    pool: DictPool, seeded: str
+) -> None:
+    """A visitor who leaves a request unanswered must not stop the data from ever refreshing."""
+    repo = SupportRepository(pool)
+    conversation_id = uuid4()
+    assert await repo.claim_conversation(conversation_id, MAYA)
+    await repo.open_approval_request(conversation_id, "BK-1042", 24_000, "full_notice")
+    with psycopg.connect(seeded, autocommit=True) as conn:
+        conn.execute(
+            "UPDATE approval_requests SET created_at = now() - %s",
+            (DEMO_PENDING_GRACE + timedelta(minutes=1),),
+        )
+    _age_the_demo(seeded, DEMO_MAX_AGE + timedelta(hours=1))
+    assert await _stale(pool)
 
 
 async def test_a_recent_chat_blocks_the_refresh(pool: DictPool, seeded: str) -> None:

@@ -54,6 +54,12 @@ export function PitchBand({ onTry }: PitchBandProps) {
           >
             How it works
           </a>
+          <a
+            href="#break-it"
+            className="px-2 py-3 text-sm font-medium text-tide-100 underline underline-offset-4 transition-colors hover:text-sand-50"
+          >
+            Try to break it
+          </a>
         </div>
 
         <dl className="mt-8 grid grid-cols-2 gap-4 border-t border-sand-50/15 pt-6 lg:grid-cols-4">

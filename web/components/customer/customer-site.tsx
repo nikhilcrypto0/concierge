@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 
 import { BookingsPanel } from "@/components/customer/bookings-panel";
+import { BreakItPanel } from "@/components/customer/break-it-panel";
 import { ChatWidget } from "@/components/customer/chat-widget";
 import { PitchBand } from "@/components/customer/pitch-band";
 import { SiteHeader } from "@/components/customer/site-header";
@@ -102,6 +103,8 @@ export function CustomerSite() {
         <ServicesSection />
         <div className="h-16" />
         <TrustSection />
+        <BreakItPanel />
+        <div className="h-16" />
       </main>
 
       <div className={dock}>

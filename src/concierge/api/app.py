@@ -73,6 +73,7 @@ BUSY = ConversationBusyError
 # when idle) well before a tier drifts.
 DEMO_MAX_AGE = timedelta(hours=3)
 DEMO_QUIET_FOR = timedelta(minutes=10)
+DEMO_PENDING_GRACE = timedelta(minutes=30)
 DEMO_CHECK_EVERY_SECONDS = 60.0
 
 
@@ -226,7 +227,7 @@ def create_app(
             return
         state.demo_checked_at = now
         repository: SupportRepository = state.repository
-        if await repository.demo_data_is_stale(DEMO_MAX_AGE, DEMO_QUIET_FOR):
+        if await repository.demo_data_is_stale(DEMO_MAX_AGE, DEMO_QUIET_FOR, DEMO_PENDING_GRACE):
             seed_sql = await asyncio.to_thread(DEMO_SEED.read_text)
             await repository.reset_demo_data(seed_sql)
             log.warning("demo.refreshed", reason="stale")
