@@ -65,6 +65,51 @@ def sanitize(raw: str, max_chars: int) -> SanitizedInput:
     )
 
 
+# Retrieved help-center text is untrusted too: it reaches the model inside the prompt, so an
+# article that was tampered with (or ingested from a poisoned source) is an injection channel
+# just like a customer message. These patterns look for text that talks TO the model.
+_DOCUMENT_INJECTION_PATTERNS = _INJECTION_PATTERNS + tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"\b(?:ignore|disregard|forget|override|bypass)\b.{0,30}"
+        r"\b(?:instructions?|rules|guidelines|polic(?:y|ies)|approval)\b",
+        r"\bnew (?:instructions?|rules|policy)\b.{0,10}:",
+        r"\b(?:system|developer) (?:prompt|message|override)\b",
+        r"\b(?:you|assistant) (?:must|should|will|shall)\b.{0,40}"
+        r"\b(?:approve|reveal|ignore|disregard|obey|comply|pretend)\b",
+        r"\bdo not (?:tell|mention|inform|reveal|show)\b.{0,30}\b(?:customer|user)\b",
+        r"\b(?:approve|grant|issue)\b.{0,20}\b(?:all|every|any)\b.{0,20}\brefunds?\b",
+        r"</?\s*(?:document|documents|system|assistant|user|instructions?|policy)\b[^>]*>",
+    )
+)
+
+
+@dataclass(frozen=True)
+class SanitizedDocument:
+    text: str
+    # True when the passage reads like an instruction aimed at the model. It is dropped, and the
+    # reason is logged internally only.
+    quarantined: bool
+
+
+def _normalize(text: str) -> str:
+    return _CONTROL.sub("", _ZERO_WIDTH.sub("", unicodedata.normalize("NFKC", text)))
+
+
+def sanitize_document(content: str, *context: str) -> SanitizedDocument:
+    """Clean one retrieved passage before it enters a prompt.
+
+    `content` is the body that will be cleaned and returned. `context` (the title and heading)
+    is only checked, because those also end up in the prompt.
+    """
+    body = _normalize(content)
+    scanned = "\n".join([body, *(_normalize(part) for part in context)])
+    quarantined = any(p.search(scanned) for p in _DOCUMENT_INJECTION_PATTERNS)
+    body = _ROLE_MARKERS.sub(" ", body)
+    body = _EXCESS_WHITESPACE.sub(lambda m: "\n\n" if "\n" in m.group() else " ", body).strip()
+    return SanitizedDocument(text=body, quarantined=quarantined)
+
+
 BOOKING_REFERENCE = re.compile(r"\bBK-?(\d{4,8})\b", re.IGNORECASE)
 
 
