@@ -1,0 +1,41 @@
+name: dependency audit
+
+# Fails when a dependency we ship has a known vulnerability. It also runs every Monday, so a new
+# advisory shows up even in a week with no pushes. Free: no model calls.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: python packages (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+      - name: Export the locked dependency list
+        run: uv export --no-hashes --locked --no-emit-project --no-header --color never > "$RUNNER_TEMP/requirements.txt"
+      - name: Audit it
+        run: uvx pip-audit -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip --progress-spinner off
+
+  web:
+    name: web packages (npm audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+      # Production dependencies only: build-time tools such as the linter never reach users.
+      - run: npm audit --omit=dev --audit-level=high
