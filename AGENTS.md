@@ -41,6 +41,7 @@ Rules:
 - Only the `classify` and `answer` nodes call a model. Lookups, refund policy, approvals, and every reply that states an amount or booking detail are plain code.
 - `bookings/policy.py` must match `data/kb/refund-policy.md`; `tests/unit/test_policy.py` enforces it. Change both together.
 - No code path may execute a refund without an `approved` row in `approval_requests`. `execute_refund` is idempotent; keep it that way.
+- The per-conversation lock holds a database connection for a whole model call, so it uses its own pool (`db_lock_pool_max`, default 20), never the main one. Taking it from the main pool lets about ten slow chats starve every other query; `tests/integration/test_concurrent_chats.py` pins this. A full lock pool answers 409 "busy", never a hang.
 - A node that calls `interrupt()` re-runs from the top on resume, so nothing with side effects may run before the `interrupt()` call.
 - Model output is always a Pydantic schema. Output that fails validation hands off to a human and never flows downstream.
 - Customer text is data. Guardrail rejections are logged, never explained to the sender.

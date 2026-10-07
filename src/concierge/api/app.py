@@ -117,6 +117,8 @@ def create_app(
         init_tracing(settings)
         pool = create_pool(settings.database_url, settings.db_pool_min, settings.db_pool_max)
         await pool.open(wait=True, timeout=30)
+        lock_pool = create_pool(settings.database_url, 0, settings.db_lock_pool_max)
+        await lock_pool.open(wait=True, timeout=30)
         try:
             async with pool.connection() as conn:
                 await run_migrations(conn)
@@ -147,6 +149,7 @@ def create_app(
             )
             app.state.settings = settings
             app.state.pool = pool
+            app.state.lock_pool = lock_pool
             app.state.repository = repository
             app.state.graph = build_graph(deps, checkpointer)
             app.state.rate_limiter = SlidingWindowRateLimiter(settings.rate_limit_per_minute)
@@ -159,6 +162,7 @@ def create_app(
                      demo_mode=settings.demo_mode)
             yield
         finally:
+            await lock_pool.close()
             await pool.close()
             shutdown_tracing(settings)
 
@@ -257,7 +261,9 @@ def create_app(
             raise HTTPException(status.HTTP_404_NOT_FOUND, "conversation not found")
         structlog.contextvars.bind_contextvars(conversation_id=str(conversation_id))
 
-        async with conversation_lock(state.pool, conversation_id) as acquired:
+        async with conversation_lock(
+            state.lock_pool, conversation_id, settings.db_lock_wait_seconds
+        ) as acquired:
             if not acquired:
                 raise BUSY
             paused = await state.graph.aget_state(_thread(conversation_id))
@@ -369,7 +375,9 @@ def create_app(
         adjusted = requested if requested is not None and requested < existing.amount_cents \
             else None
 
-        async with conversation_lock(state.pool, conversation_id) as acquired:
+        async with conversation_lock(
+            state.lock_pool, conversation_id, settings.db_lock_wait_seconds
+        ) as acquired:
             if not acquired:
                 raise BUSY
             decided = await repository.decide_approval(approval_id, body.approve,

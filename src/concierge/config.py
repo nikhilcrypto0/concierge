@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://localhost:5432/concierge"
     db_pool_min: int = 1
     db_pool_max: int = 10
+    # Conversation locks hold a connection for the length of a model call, so they get their own
+    # pool: the limit on simultaneous chats, and why those chats cannot starve the main pool.
+    db_lock_pool_max: int = 20
+    db_lock_wait_seconds: float = 2.0
 
     anthropic_api_key: SecretStr | None = None
     primary_model: str = "claude-opus-5"
