@@ -15,6 +15,7 @@ Customer support agent built for production: a LangGraph workflow over Claude, P
 - MCP server (stdio, read-only): `uv run concierge-mcp`
 - Retrieval eval (free): `uv run python evals/run_retrieval_eval.py`
 - Agent eval (calls Claude and costs money, so ask before running): `uv run python evals/run_agent_eval.py`
+- After any eval run, refresh the page data: `uv run python evals/export_web_data.py` (writes `web/lib/eval-data.json`, which the public `/evals` page shows; `tests/unit/test_eval_web_data.py` fails when it is stale)
 
 ## Demo UI (`web/`)
 

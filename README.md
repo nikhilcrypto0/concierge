@@ -8,7 +8,7 @@
 
 **A customer support agent that cannot move money on its own.** It answers questions from a help center and handles refund requests, but no refund is paid until a person approves it. The refund amount comes from the written policy in code, never from the model, and every approval is recorded with the reviewer, the time, and the policy reason for the amount.
 
-**Live demo: [concierge-sand.vercel.app](https://concierge-sand.vercel.app).** Pick a customer, ask it to cancel BK-1042 and refund you, and watch the request wait for a person. The demo runs on free hosting, so the first message after a quiet spell can take up to a minute while the API wakes up. The support console is password protected, because it is where refunds are approved; the screenshots below show it.
+**Live demo: [concierge-sand.vercel.app](https://concierge-sand.vercel.app).** Pick a customer, ask it to cancel BK-1042 and refund you, and watch the request wait for a person. The demo runs on free hosting, so the first message after a quiet spell can take up to a minute while the API wakes up. The support console is password protected, because it is where refunds are approved; a [view-only tour with sample data](https://concierge-sand.vercel.app/console/sample) and the screenshots below show it. Every test case, with what counts as correct and what each model did, is on the [How it was tested](https://concierge-sand.vercel.app/evals) page.
 
 Under the hood: a **LangGraph** workflow over **Claude**, retrieval on **Postgres + pgvector**, and **evals that gate CI**.
 
