@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { LiveStats } from "@/components/customer/live-stats";
 import { Pill } from "@/components/ui/pill";
 import { PROOF, PROOF_HREF } from "@/lib/proof";
@@ -78,6 +80,10 @@ export function PitchBand({ onTry, progress }: PitchBandProps) {
         <p className="mt-4 text-xs leading-relaxed text-sand-300">
           Measured on {PROOF.measuredOn} with {PROOF.model} on {PROOF.conversations} test
           conversations.{" "}
+          <Link href="/evals" className="underline underline-offset-2 hover:text-tide-100">
+            See every test case
+          </Link>
+          {" · "}
           <a href={PROOF_HREF} className="underline underline-offset-2 hover:text-tide-100">
             How it was measured
           </a>
