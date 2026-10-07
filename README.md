@@ -37,7 +37,7 @@ Measured on 2026-10-06 with Claude Opus 5, on the current build, on 54 conversat
 | Refunds executed without a human decision | **0** |
 | Cost per conversation | **$0.0082** |
 | Turn latency | **p50 2.1 s, p95 4.9 s** |
-| Retrieval (shipped mode) | **Recall@4 1.00, MRR 0.927** |
+| Retrieval (shipped mode) | **Recall@4 1.00, Section@4 0.976, MRR 0.927** |
 
 ## What it does
 
@@ -117,13 +117,15 @@ flowchart TD
 
 ### Retrieval (free, no LLM calls, gates CI on every push)
 
-42 answerable questions plus 6 off-topic ones, relevance judged at the article level, top 4 chunks.
+42 answerable questions plus 6 off-topic ones, top 4 chunks. Recall@4 is judged at the article level; Section@4 is stricter and counts a hit only when a retrieved chunk is the section that answers the question.
 
-| Mode | Recall@1 | Recall@4 | MRR | Relevance-gate accuracy |
-|---|---|---|---|---|
-| Hybrid (keyword weight 0.5) | 0.833 | 1.000 | 0.899 | 0.979 |
-| **Vector only (shipped)** | **0.881** | **1.000** | **0.927** | **0.979** |
-| Keyword only | 0.690 | 0.857 | 0.766 | 0.938 |
+| Mode | Recall@1 | Recall@4 | Section@4 | MRR | Relevance-gate accuracy |
+|---|---|---|---|---|---|
+| Hybrid (keyword weight 0.5) | 0.833 | 1.000 | 0.976 | 0.899 | 0.979 |
+| **Vector only (shipped)** | **0.881** | **1.000** | **0.976** | **0.927** | **0.979** |
+| Keyword only | 0.690 | 0.857 | 0.810 | 0.766 | 0.938 |
+
+Section@4 is the number that explains the one question the agent still fails. Article-level recall was a perfect 1.000, which hid it: for "Can I pay the cleaner in cash?" vector search returns the payments article's generic overview, not its "Accepted payment methods" section, so the answer step correctly says it cannot find the answer. Hybrid search fixes that question but misses a different one ("Can I book a plumber on a Sunday?"), and no keyword weight from 0.25 to 1.5, nor a larger top-k (5 or 6), fixes both. With 42 questions, tuning further would only fit the test set, so the shipped mode is unchanged.
 
 With equal fusion weights, hybrid dropped to Recall@1 0.786: full-text matches on common words ("problem", "home") pulled in the wrong articles. Halving the keyword weight helped but did not beat vector-only. CI fails the build if the shipped mode falls below Recall@4 0.95, MRR 0.85, or gate accuracy 0.90.
 
@@ -167,7 +169,7 @@ How to read this honestly:
 
 **1. Query rewriting silently broke retrieval.** The first agent run answered 4 simple questions ("Do you have service in Denver?", "Are your plumbers licensed?") with "I couldn't find that." The retrieval eval had scored Recall@4 of 1.00, because it searches with the raw question. In production, the classifier rewrote the question first and added the company name, which matched the boilerplate intro of *every* article and pushed the real answer out of the top 4. The answer step then correctly refused to answer from the wrong documents. Fix: search with both the customer's words and the rewrite, and fuse the rankings. All 4 cases pass now, and a unit test pins the regression.
 
-**2. The remaining failure is the embedding model, not the pipeline.** "Can I just pay the cleaner in cash?" fails when the rewrite keeps the customer's phrasing. A direct retrieval check shows why: bge-small ranks cleaning-service articles above the payment-methods section for "pay the *cleaner*", which is not even in the top 8. When the rewrite says "payment methods cash", it ranks second and the case passes. The next experiment is to measure a larger embedding model, and hybrid search on rewritten queries, since an exact match on "cash" is where full-text search should help.
+**2. The remaining failure is retrieval granularity, not the pipeline.** "Can I just pay the cleaner in cash?" fails when the rewrite keeps the customer's phrasing. A direct retrieval check shows why: bge-small ranks cleaning-service articles above the payment-methods section for "pay the *cleaner*", which is not even in the top 6. The answer step is right to refuse: the chunk it was given was the payments article's overview, not the section that says cash is not accepted. The article-level retrieval metric could not see this, so the retrieval eval now also scores section-level hits (Section@4 above). I tried hybrid search, keyword weights from 0.25 to 1.5, and a top-k of 5 and 6: none fixed it without breaking another question. The next experiment is a larger embedding model, which needs a schema migration and more memory than the free host has, so it is not done.
 
 ### Review findings, all fixed
 
