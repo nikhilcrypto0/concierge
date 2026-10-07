@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.2.0
       - name: Export the locked dependency list
         run: uv export --no-hashes --locked --no-emit-project --no-header --color never > "$RUNNER_TEMP/requirements.txt"
       - name: Audit it
