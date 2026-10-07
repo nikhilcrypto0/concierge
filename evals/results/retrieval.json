@@ -12,9 +12,13 @@
       "recall_at_k": 1.0,
       "mrr": 0.899,
       "gate_accuracy": 0.979,
-      "p50_latency_ms": 6.8,
-      "p95_latency_ms": 23.7,
-      "misses": []
+      "p50_latency_ms": 6.3,
+      "p95_latency_ms": 8.0,
+      "misses": [],
+      "section_recall_at_k": 0.976,
+      "section_misses": [
+        "r23: Can I book a plumber on a Sunday? -> ['service-areas-and-hours/How far ahead you can book', 'cancellations-and-rescheduling/Rescheduling an appointment', 'professionals-and-safety/Do I need to be home', 'cancellations-and-rescheduling/Arrival windows']"
+      ]
     },
     {
       "mode": "vector",
@@ -23,9 +27,13 @@
       "recall_at_k": 1.0,
       "mrr": 0.927,
       "gate_accuracy": 0.979,
-      "p50_latency_ms": 6.4,
-      "p95_latency_ms": 19.5,
-      "misses": []
+      "p50_latency_ms": 6.3,
+      "p95_latency_ms": 9.7,
+      "misses": [],
+      "section_recall_at_k": 0.976,
+      "section_misses": [
+        "r16: Can I pay the cleaner in cash? -> ['services-and-pricing/Cleaning services', 'professionals-and-safety/Do I need to be home', 'payments-and-billing/Overview', 'services-and-pricing/Trip fee and what is not included']"
+      ]
     },
     {
       "mode": "keyword",
@@ -34,8 +42,8 @@
       "recall_at_k": 0.857,
       "mrr": 0.766,
       "gate_accuracy": 0.938,
-      "p50_latency_ms": 6.9,
-      "p95_latency_ms": 20.6,
+      "p50_latency_ms": 6.5,
+      "p95_latency_ms": 10.6,
       "misses": [
         "r15: Do I pay extra for travel to my house? -> ['payments-and-billing', 'refund-policy', 'payments-and-billing']",
         "r22: Do you work in Denver? -> ['services-and-pricing', 'contact-support', 'payments-and-billing']",
@@ -43,6 +51,17 @@
         "r28: The handyman scratched my floor -> ['services-and-pricing']",
         "r33: I have a dog, is that a problem? -> ['contact-support', 'satisfaction-guarantee', 'satisfaction-guarantee']",
         "r40: What are your customer service hours? -> ['services-and-pricing', 'service-areas-and-hours', 'service-areas-and-hours']"
+      ],
+      "section_recall_at_k": 0.81,
+      "section_misses": [
+        "r09: The technician is an hour late, can I cancel? -> ['cancellations-and-rescheduling/How to cancel a booking', 'cancellations-and-rescheduling/Rescheduling an appointment', 'refund-policy/How much you get back when you cancel', 'cancellations-and-rescheduling/When Tidewell cancels']",
+        "r15: Do I pay extra for travel to my house? -> ['payments-and-billing/Accepted payment methods', 'refund-policy/When the money arrives', 'payments-and-billing/Overview', 'payments-and-billing/When your card is charged']",
+        "r22: Do you work in Denver? -> ['services-and-pricing/Repairs and handyman services', 'contact-support/What to have ready', 'payments-and-billing/Overview', 'payments-and-billing/When your card is charged']",
+        "r23: Can I book a plumber on a Sunday? -> ['cancellations-and-rescheduling/How to cancel a booking', 'service-areas-and-hours/How far ahead you can book', 'payments-and-billing/Promo codes and credits', 'refund-policy/Bookings that were already refunded']",
+        "r27: My faucet repair broke after two weeks -> ['services-and-pricing/Repairs and handyman services', 'cancellations-and-rescheduling/Rescheduling an appointment', 'cancellations-and-rescheduling/Arrival windows', 'contact-support/Complaints and escalations']",
+        "r28: The handyman scratched my floor -> ['services-and-pricing/Repairs and handyman services']",
+        "r33: I have a dog, is that a problem? -> ['contact-support/What to have ready', 'satisfaction-guarantee/How to make a claim', 'satisfaction-guarantee/Re-service or refund', 'satisfaction-guarantee/What is not covered']",
+        "r40: What are your customer service hours? -> ['services-and-pricing/Repairs and handyman services', 'service-areas-and-hours/Appointment hours', 'service-areas-and-hours/Addresses outside the service area', 'service-areas-and-hours/Overview']"
       ]
     }
   ]

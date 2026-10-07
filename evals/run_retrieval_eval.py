@@ -40,6 +40,14 @@ class ModeReport:
     p50_latency_ms: float
     p95_latency_ms: float
     misses: list[str]
+    # Stricter than recall_at_k: the retrieved chunk must be the section that answers the
+    # question, not just any section of the right article.
+    section_recall_at_k: float
+    section_misses: list[str]
+
+
+def _as_list(value: str | list[str]) -> list[str]:
+    return [value] if isinstance(value, str) else value
 
 
 def _percentile(values: list[float], pct: float) -> float:
@@ -50,11 +58,12 @@ def _percentile(values: list[float], pct: float) -> float:
 async def evaluate(kb: KnowledgeBase, mode: SearchMode, k: int, floor: float) -> ModeReport:
     rows = [json.loads(line) for line in DATASET.read_text().splitlines() if line.strip()]
     answerable = [r for r in rows if r["expected_doc"]]
-    hits_at_1 = hits_at_k = 0
+    hits_at_1 = hits_at_k = section_hits = 0
     reciprocal_ranks: list[float] = []
     gate_correct = 0
     latencies: list[float] = []
     misses: list[str] = []
+    section_misses: list[str] = []
 
     for row in rows:
         start = time.perf_counter()
@@ -73,6 +82,12 @@ async def evaluate(kb: KnowledgeBase, mode: SearchMode, k: int, floor: float) ->
         reciprocal_ranks.append(1 / rank if rank else 0.0)
         if rank is None:
             misses.append(f"{row['id']}: {row['question']} -> {docs[:3]}")
+        wanted = _as_list(row["expected_heading"])
+        if any(r.doc_slug == row["expected_doc"] and r.heading in wanted for r in results):
+            section_hits += 1
+        else:
+            got = [f"{r.doc_slug}/{r.heading}" for r in results]
+            section_misses.append(f"{row['id']}: {row['question']} -> {got}")
 
     n = len(answerable)
     return ModeReport(
@@ -85,6 +100,8 @@ async def evaluate(kb: KnowledgeBase, mode: SearchMode, k: int, floor: float) ->
         p50_latency_ms=round(_percentile(latencies, 0.5), 1),
         p95_latency_ms=round(_percentile(latencies, 0.95), 1),
         misses=misses,
+        section_recall_at_k=round(section_hits / n, 3),
+        section_misses=section_misses,
     )
 
 
@@ -122,14 +139,17 @@ async def main() -> int:
          "reports": [asdict(r) for r in reports]}, indent=2) + "\n")
 
     print(f"k={k} similarity_floor={floor} keyword_weight={settings.retrieval_keyword_weight}")
-    print(f"{'mode':<8} {'R@1':>6} {'R@k':>6} {'MRR':>6} {'gate':>6} {'p50ms':>7} {'p95ms':>7}")
+    print(f"{'mode':<8} {'R@1':>6} {'R@k':>6} {'sec@k':>6} {'MRR':>6} {'gate':>6} "
+          f"{'p50ms':>7} {'p95ms':>7}")
     for r in reports:
-        print(f"{r.mode:<8} {r.recall_at_1:>6} {r.recall_at_k:>6} {r.mrr:>6} "
-              f"{r.gate_accuracy:>6} {r.p50_latency_ms:>7} {r.p95_latency_ms:>7}")
+        print(f"{r.mode:<8} {r.recall_at_1:>6} {r.recall_at_k:>6} {r.section_recall_at_k:>6} "
+              f"{r.mrr:>6} {r.gate_accuracy:>6} {r.p50_latency_ms:>7} {r.p95_latency_ms:>7}")
     gated = next(r for r in reports if r.mode == settings.retrieval_mode)
     print(f"thresholds apply to the production mode: {gated.mode}")
     for miss in gated.misses:
         print("  miss:", miss)
+    for miss in gated.section_misses:
+        print("  section miss:", miss)
 
     failures = [
         name for name, value, minimum in (

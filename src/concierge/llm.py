@@ -25,6 +25,13 @@ Intent = Literal["question", "booking_status", "refund_request", "human_handoff"
 
 EFFORT_UNSUPPORTED_PREFIXES = ("claude-haiku",)
 
+
+def effort_options(model: str, effort: Effort) -> dict[str, Any]:
+    """Request options for the effort setting. Haiku rejects it with a 400, so it is left out."""
+    if model.startswith(EFFORT_UNSUPPORTED_PREFIXES):
+        return {}
+    return {"output_config": {"effort": effort}}
+
 # Transient provider failures switch to the fallback model; client errors (400s) do not.
 FALLBACK_ON: tuple[type[BaseException], ...] = (
     anthropic.APIConnectionError,
@@ -89,14 +96,10 @@ class AnthropicSupportLLM:
         self, schema: type[BaseModel], effort: Effort, max_tokens: int
     ) -> Runnable[Any, Any]:
         def build(model: str) -> Runnable[Any, Any]:
-            # Haiku rejects the effort setting with a 400, so it is left out for those models.
-            extra = {} if model.startswith(EFFORT_UNSUPPORTED_PREFIXES) else {
-                "output_config": {"effort": effort}
-            }
             chat = ChatAnthropic(
                 model=model,
                 max_tokens=max_tokens,
-                **extra,
+                **effort_options(model, effort),
                 max_retries=self._settings.llm_max_retries,
                 default_request_timeout=self._settings.llm_timeout_seconds,
                 api_key=self._settings.anthropic_api_key,
